@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://test-validity-evaluator/contracts/TestFinding.schema.json",
+  "title": "TestFinding",
+  "type": "object",
+  "required": ["id", "test_id", "severity", "category", "evidence", "suggested_fix", "confidence"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "FindingId = sha256(test_id || '\\n' || category || '\\n' || normalized_evidence_signature)[:12]",
+      "pattern": "^[a-f0-9]{12}$|^f_[a-f0-9]+$"
+    },
+    "test_id": { "type": "string" },
+    "severity": { "enum": ["critical", "major", "minor", "info"] },
+    "category": {
+      "enum": [
+        "missing_assertion","missing_case","over_mocking","wrong_oracle","weak_equality",
+        "weak_assertion","tautology","over_coupling","name_behavior_mismatch",
+        "missed_edge_case","off_by_one","state_violation","fuzz_counterexample","spec_divergence"
+      ]
+    },
+    "evidence": {
+      "type": "object",
+      "description": "최소 한 필드 필수. critique은 test_snippet, mutation은 mutant_diff, adversarial은 case_repr.",
+      "anyOf": [
+        { "required": ["test_snippet"] },
+        { "required": ["mutant_diff"] },
+        { "required": ["case_repr"] }
+      ],
+      "properties": {
+        "test_snippet": { "type": "string", "description": "파일:라인 범위와 인용된 테스트 코드" },
+        "mutant_diff":  { "type": "string", "description": "before/after diff 스니펫" },
+        "case_repr":    { "type": "string", "description": "input·expected·observed" }
+      },
+      "additionalProperties": false
+    },
+    "suggested_fix": {
+      "type": "string",
+      "minLength": 1,
+      "description": "추상 문구 금지. 입력값·기대값을 가진 컴파일 가능한 코드 조각이어야 함."
+    },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "caused_by_mutants": { "type": "array", "items": { "type": "string" } },
+    "caused_by_cases":   { "type": "array", "items": { "type": "string" } },
+    "suppressed": { "type": "boolean", "default": false }
+  }
+}

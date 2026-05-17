@@ -1,0 +1,50 @@
+key: python.pytest
+language: python
+framework: pytest
+version: 0.1.0
+maintainer: binary-ho
+
+capabilities:
+  supports_async:              true
+  supports_property_based:     true     # via hypothesis
+  supports_parameterized:      true     # via @pytest.mark.parametrize
+  supports_parallel_execution: false    # 단일 프로세스로 시작
+  syntactic_operators:
+    - AOR              # Arithmetic Operator Replacement (+ → -, etc.)
+    - ROR              # Relational Operator Replacement (< → <=, ==, etc.)
+    - COR              # Conditional Operator Replacement (and → or)
+    - LCR              # Logical Connector Replacement (~boolean negation)
+    - BoundaryShift    # off-by-one boundary shifts (n → n+1, n-1)
+    - ConstantReplace  # 정수/문자열 상수 교체
+
+implementations:
+  test_discoverer:    contracts/adapters/python_pytest/discover.py
+  subject_resolver:   contracts/adapters/python_pytest/resolve.py
+  syntactic_operator: contracts/adapters/python_pytest/mutate.py
+  injector:           contracts/adapters/python_pytest/inject.py
+  runner:             contracts/adapters/python_pytest/run.py
+
+tier_heuristic_dictionary:
+  db_imports:
+    - psycopg
+    - psycopg2
+    - sqlalchemy
+    - pymongo
+    - redis
+    - mysql.connector
+    - asyncpg
+  network_imports:
+    - requests
+    - httpx
+    - aiohttp
+    - urllib3
+  driver_imports:
+    - selenium
+    - playwright
+    - puppeteer       # py-pyppeteer
+  mock_libs:
+    - unittest.mock
+    - pytest_mock
+    - responses
+    - respx
+    - vcr

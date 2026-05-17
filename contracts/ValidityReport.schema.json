@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://test-validity-evaluator/contracts/ValidityReport.schema.json",
+  "title": "ValidityReport",
+  "type": "object",
+  "required": [
+    "session_id", "summary", "findings",
+    "scope_summary", "adapter_summary"
+  ],
+  "properties": {
+    "session_id": { "type": "string", "pattern": "^evs_" },
+    "summary": {
+      "type": "object",
+      "required": ["mutation_score", "finding_counts_by_severity"],
+      "properties": {
+        "mutation_score": { "type": "number", "minimum": 0, "maximum": 1 },
+        "finding_counts_by_severity": {
+          "type": "object",
+          "required": ["critical","major","minor","info"],
+          "properties": {
+            "critical": { "type": "integer", "minimum": 0 },
+            "major":    { "type": "integer", "minimum": 0 },
+            "minor":    { "type": "integer", "minimum": 0 },
+            "info":     { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "test_subject_map_ref":   { "type": "string" },
+    "mutation_ledger_ref":    { "type": "string" },
+    "adversarial_ledger_ref": { "type": "string" },
+    "findings": {
+      "type": "array",
+      "items": { "$ref": "TestFinding.schema.json" }
+    },
+    "recommendations": { "type": "array", "items": { "type": "string" } },
+    "scope_summary": {
+      "type": "object",
+      "required": ["total_tests_examined","included","excluded_by_tier"],
+      "properties": {
+        "total_tests_examined": { "type": "integer", "minimum": 0 },
+        "included":             { "type": "integer", "minimum": 0 },
+        "excluded_by_tier": {
+          "type": "object",
+          "properties": {
+            "integration": { "type": "integer", "minimum": 0 },
+            "e2e":         { "type": "integer", "minimum": 0 },
+            "unknown":     { "type": "integer", "minimum": 0 }
+          }
+        },
+        "excluded_by_confidence": { "type": "integer", "minimum": 0 },
+        "forced_via_annotation":  { "type": "integer", "minimum": 0 }
+      }
+    },
+    "adapter_summary": {
+      "type": "object",
+      "required": ["adapter_key", "adapter_version", "capabilities_used", "capabilities_missing", "skipped_due_to_capability"],
+      "properties": {
+        "adapter_key":     { "type": "string" },
+        "adapter_version": { "type": "string" },
+        "capabilities_used":    { "type": "array", "items": { "type": "string" } },
+        "capabilities_missing": { "type": "array", "items": { "type": "string" } },
+        "skipped_due_to_capability": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "warnings": { "type": "array", "items": { "type": "string" } },
+    "notices":  { "type": "array", "items": { "type": "string" } }
+  }
+}

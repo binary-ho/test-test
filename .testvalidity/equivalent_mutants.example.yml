@@ -1,0 +1,18 @@
+# Equivalent mutants — mutant signatures that the equivalence filter should
+# treat as `force_equivalent` (no execution, no scoring impact, ledger
+# retains the record with execution_status="filtered_equivalent").
+#
+# Loaded by `skills/llm-based-semantic-mutation-testing/scripts/orchestrate.py`
+# at the equivalence-filter step.
+#
+# Schema:
+#   - mutant_signature_hash: "sha256:<16-hex>"   # match the value emitted by mutate.py
+#     reason:                free-text justification
+#     owner:                 string
+#
+# Append from the HTML report's [mark equivalent] button.
+
+# Example
+# - mutant_signature_hash: sha256:abc1234567890def
+#   reason:  "Behavior-preserving refactor of guard clause (early-return ↔ if-else)"
+#   owner:   jinho.lee16

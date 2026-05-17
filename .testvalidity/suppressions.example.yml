@@ -1,0 +1,23 @@
+# Suppressions — finding IDs that should be ignored across sessions.
+#
+# Loaded by both meso skills (agentic-adversarial-testing finalize phase
+# applies these; mutation skill respects them via the orchestrator's
+# aggregate pass). Matching findings are kept in the ledger with
+# `suppressed=true` but do not appear in the user-facing findings list.
+#
+# Schema:
+#   - finding_id: 12-hex sha (= TestFinding.id)
+#     reason:     free-text justification (mandatory — empty reasons are rejected)
+#     owner:      string identifier (e.g. email, github handle)
+#     expires_at: ISO date — after this date, the suppression is ignored
+#     scope:      this_session  →  applies only inside one EvaluationSession
+#                 persistent    →  applies across sessions (default)
+#
+# Append from the HTML report's [mark wontfix] button.
+
+# Example
+# - finding_id: a1b2c3d4e5f6
+#   reason:    "Equivalent mutant — purely cosmetic rename, behavior preserved."
+#   owner:     jinho.lee16
+#   expires_at: 2026-08-01
+#   scope:     persistent

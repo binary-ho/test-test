@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://test-validity-evaluator/contracts/MutationLedger.schema.json",
+  "title": "MutationLedger",
+  "type": "object",
+  "required": ["generated_at", "tool_versions", "adapter_key", "records"],
+  "properties": {
+    "generated_at": { "type": "string", "format": "date-time" },
+    "tool_versions": { "type": "object", "additionalProperties": { "type": "string" } },
+    "adapter_key":   { "type": "string" },
+    "records": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["mutant_id","operator","file","span","execution_status"],
+        "properties": {
+          "mutant_id":  { "type": "string" },
+          "operator":   { "enum": ["AOR","ROR","COR","LCR","BoundaryShift","ConstantReplace","semantic"] },
+          "file":       { "type": "string" },
+          "span":       { "type": "array", "items": { "type": "integer" }, "minItems": 2, "maxItems": 2 },
+          "before_code":{ "type": "string" },
+          "after_code": { "type": "string" },
+          "intent":     { "type": "string" },
+          "equivalence_status": {
+            "enum": ["definitely_distinct","likely_equivalent","force_equivalent","unknown"]
+          },
+          "execution_status": {
+            "enum": ["killed","survived","timeout","error","filtered_equivalent","budget_dropped"]
+          },
+          "killing_tests": { "type": "array", "items": { "type": "string" } },
+          "wall_clock_seconds": { "type": "number", "minimum": 0 },
+          "cache_status": { "enum": ["hit","miss","invalidated"] },
+          "diagnosis": {
+            "type": "object",
+            "properties": {
+              "finding_id": { "type": "string" },
+              "summary":    { "type": "string" },
+              "evidence":   { "type": "string" }
+            }
+          },
+          "suppressed": { "type": "boolean", "default": false }
+        }
+      }
+    }
+  }
+}

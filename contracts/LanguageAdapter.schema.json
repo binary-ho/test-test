@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://test-validity-evaluator/contracts/LanguageAdapter.schema.json",
+  "title": "LanguageAdapter",
+  "type": "object",
+  "required": ["key","language","framework","version","capabilities","implementations","tier_heuristic_dictionary"],
+  "properties": {
+    "key":        { "type": "string", "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$" },
+    "language":   { "type": "string" },
+    "framework":  { "type": "string" },
+    "version":    { "type": "string" },
+    "maintainer": { "type": "string" },
+    "capabilities": {
+      "type": "object",
+      "required": ["supports_async","supports_property_based","supports_parameterized","supports_parallel_execution","syntactic_operators"],
+      "properties": {
+        "supports_async":             { "type": "boolean" },
+        "supports_property_based":    { "type": "boolean" },
+        "supports_parameterized":     { "type": "boolean" },
+        "supports_parallel_execution":{ "type": "boolean" },
+        "syntactic_operators": {
+          "type": "array",
+          "items": { "enum": ["AOR","ROR","COR","LCR","BoundaryShift","ConstantReplace"] }
+        }
+      }
+    },
+    "implementations": {
+      "type": "object",
+      "required": ["test_discoverer","subject_resolver","syntactic_operator","injector","runner"],
+      "additionalProperties": false,
+      "properties": {
+        "test_discoverer":    { "type": "string", "description": "filesystem path or python module" },
+        "subject_resolver":   { "type": "string" },
+        "syntactic_operator": { "type": "string" },
+        "injector":           { "type": "string" },
+        "runner":             { "type": "string" }
+      }
+    },
+    "tier_heuristic_dictionary": {
+      "type": "object",
+      "required": ["db_imports","network_imports","driver_imports","mock_libs"],
+      "properties": {
+        "db_imports":      { "type": "array", "items": { "type": "string" } },
+        "network_imports": { "type": "array", "items": { "type": "string" } },
+        "driver_imports":  { "type": "array", "items": { "type": "string" } },
+        "mock_libs":       { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}
