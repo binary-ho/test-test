@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Test Validity Evaluator — 2개의 Claude Skill 소개</title>
+<style>
+  :root {
+    --bg: #f8fafc;
+    --fg: #0f172a;
+    --muted: #64748b;
+    --accent-a: #6366f1;
+    --accent-b: #ef4444;
+    --card: #ffffff;
+    --code-bg: #f1f5f9;
+    --code-fg: #1e293b;
+    --border: #e2e8f0;
+    --shadow: 0 1px 3px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.04);
+    --shadow-lg: 0 4px 6px rgba(0,0,0,.05), 0 10px 30px rgba(0,0,0,.08);
+    --radius: 14px;
+    --radius-sm: 8px;
+  }
+  [data-theme="dark"] {
+    --bg: #0b1020;
+    --fg: #e2e8f0;
+    --muted: #94a3b8;
+    --accent-a: #818cf8;
+    --accent-b: #f87171;
+    --card: #131a2e;
+    --code-bg: #0f1730;
+    --code-fg: #e2e8f0;
+    --border: #1f2944;
+    --shadow: 0 1px 3px rgba(0,0,0,.3), 0 4px 12px rgba(0,0,0,.3);
+    --shadow-lg: 0 4px 6px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.4);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Pretendard", "Apple SD Gothic Neo",
+                 "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    line-height: 1.65;
+    font-size: 16px;
+    transition: background .25s, color .25s;
+  }
+  code, pre, .mono { font-family: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace; }
+
+  /* Header */
+  header.site {
+    position: sticky; top: 0; z-index: 50;
+    background: color-mix(in srgb, var(--bg) 92%, transparent);
+    backdrop-filter: saturate(180%) blur(12px);
+    border-bottom: 1px solid var(--border);
+  }
+  header.site .row {
+    max-width: 1100px; margin: 0 auto; padding: 14px 24px;
+    display: flex; align-items: center; gap: 14px;
+  }
+  header.site .brand {
+    font-weight: 700; letter-spacing: -.01em;
+  }
+  header.site nav {
+    margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap;
+  }
+  header.site nav a {
+    color: var(--muted); text-decoration: none; font-size: 14px;
+    padding: 6px 10px; border-radius: var(--radius-sm);
+  }
+  header.site nav a:hover { color: var(--fg); background: var(--code-bg); }
+  .theme-btn {
+    border: 1px solid var(--border); background: var(--card); color: var(--fg);
+    border-radius: 999px; padding: 6px 12px; font-size: 13px; cursor: pointer;
+  }
+
+  /* Hero */
+  .hero {
+    max-width: 1100px; margin: 0 auto; padding: 64px 24px 32px;
+  }
+  .hero .eyebrow {
+    display: inline-block; background: var(--code-bg); color: var(--muted);
+    padding: 4px 10px; border-radius: 999px; font-size: 12px; letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+  .hero h1 {
+    font-size: clamp(28px, 4.8vw, 44px); line-height: 1.15;
+    margin: 14px 0 12px; letter-spacing: -.02em;
+  }
+  .hero p.lead {
+    font-size: 18px; color: var(--muted); margin: 0; max-width: 760px;
+  }
+  .pair {
+    margin-top: 36px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 18px;
+  }
+  @media (max-width: 760px) { .pair { grid-template-columns: 1fr; } }
+  .pair .pill {
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 22px; box-shadow: var(--shadow);
+  }
+  .pair .pill h3 { margin: 0 0 6px; font-size: 18px; }
+  .pair .pill .label {
+    display: inline-block; font-size: 12px; padding: 3px 10px; border-radius: 999px;
+    margin-bottom: 8px;
+  }
+  .pair .pill.skill-a .label { background: color-mix(in srgb, var(--accent-a) 16%, transparent); color: var(--accent-a); }
+  .pair .pill.skill-b .label { background: color-mix(in srgb, var(--accent-b) 16%, transparent); color: var(--accent-b); }
+  .pair .pill p { color: var(--muted); margin: 0; }
+
+  /* Sections */
+  section.block {
+    max-width: 1100px; margin: 56px auto; padding: 0 24px;
+  }
+  section.block h2 {
+    font-size: 26px; letter-spacing: -.01em; margin: 0 0 6px;
+  }
+  section.block .desc { color: var(--muted); margin: 0 0 28px; max-width: 760px; }
+
+  /* Skill card */
+  .skill-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: var(--shadow); overflow: hidden;
+  }
+  .skill-card .top {
+    padding: 24px 26px; border-bottom: 1px solid var(--border);
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px;
+  }
+  .skill-card .top .name {
+    font-family: "JetBrains Mono", Menlo, Consolas, monospace;
+    font-size: 18px; font-weight: 600;
+  }
+  .skill-card.a .top .name { color: var(--accent-a); }
+  .skill-card.b .top .name { color: var(--accent-b); }
+  .skill-card .top .badge {
+    font-size: 11px; padding: 3px 8px; border-radius: 999px;
+    background: var(--code-bg); color: var(--muted); letter-spacing: .04em;
+  }
+  .skill-card .top .desc {
+    width: 100%; color: var(--muted); margin: 6px 0 0; font-size: 14.5px;
+  }
+  .skill-card .body { padding: 8px 26px 24px; }
+  .skill-card details {
+    border-top: 1px solid var(--border); padding: 14px 0;
+  }
+  .skill-card details:first-child { border-top: none; }
+  .skill-card details > summary {
+    cursor: pointer; font-weight: 600; font-size: 15px;
+    list-style: none; display: flex; align-items: center; gap: 10px;
+    padding: 6px 0;
+  }
+  .skill-card details > summary::-webkit-details-marker { display: none; }
+  .skill-card details > summary::before {
+    content: "›"; transition: transform .2s; color: var(--muted);
+    font-size: 18px; line-height: 1;
+  }
+  .skill-card details[open] > summary::before { transform: rotate(90deg); }
+  .skill-card details .content { padding: 8px 0 6px 18px; color: var(--fg); }
+  .skill-card details .content p { margin: 6px 0; }
+  .skill-card ul, .skill-card ol { padding-left: 22px; margin: 8px 0; }
+  .skill-card li { margin: 4px 0; }
+
+  /* Code blocks */
+  pre.code {
+    background: var(--code-bg); color: var(--code-fg);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 14px 16px; margin: 10px 0; overflow-x: auto;
+    font-size: 13.5px; line-height: 1.6;
+    position: relative;
+  }
+  .code-wrap { position: relative; }
+  .copy-btn {
+    position: absolute; top: 8px; right: 8px;
+    background: var(--card); border: 1px solid var(--border); color: var(--muted);
+    border-radius: 6px; font-size: 11.5px; padding: 4px 8px; cursor: pointer;
+    opacity: 0; transition: opacity .2s;
+  }
+  .code-wrap:hover .copy-btn { opacity: 1; }
+  .copy-btn:hover { color: var(--fg); }
+  .copy-btn.copied { color: var(--accent-a); border-color: var(--accent-a); }
+  code.inline {
+    background: var(--code-bg); color: var(--code-fg);
+    padding: 1.5px 6px; border-radius: 4px; font-size: 13.5px;
+    border: 1px solid var(--border);
+  }
+
+  /* Flow diagram */
+  .flow {
+    background: var(--code-bg); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 22px;
+    font-family: "JetBrains Mono", Menlo, Consolas, monospace;
+    font-size: 13px; line-height: 1.8;
+    white-space: pre; overflow-x: auto;
+    color: var(--code-fg);
+  }
+
+  /* Two-column comparison */
+  .compare {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 18px;
+  }
+  @media (max-width: 820px) { .compare { grid-template-columns: 1fr; } }
+
+  /* Usage steps */
+  .steps {
+    counter-reset: step;
+    display: grid; gap: 14px;
+  }
+  .step {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 18px 22px 18px 60px;
+    position: relative; box-shadow: var(--shadow);
+  }
+  .step::before {
+    counter-increment: step;
+    content: counter(step);
+    position: absolute; left: 18px; top: 18px;
+    width: 30px; height: 30px; border-radius: 50%;
+    background: var(--accent-a); color: white;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 14px;
+  }
+  .step h4 { margin: 0 0 4px; font-size: 16px; }
+  .step p { margin: 0; color: var(--muted); font-size: 14.5px; }
+
+  /* Status banner */
+  .status {
+    background: color-mix(in srgb, var(--accent-b) 8%, var(--card));
+    border: 1px solid color-mix(in srgb, var(--accent-b) 30%, var(--border));
+    border-radius: var(--radius); padding: 18px 22px;
+    margin: 26px 0;
+  }
+  .status h3 { margin: 0 0 6px; color: var(--accent-b); font-size: 15px; }
+  .status p { margin: 4px 0 0; font-size: 14.5px; }
+
+  /* Footer */
+  footer {
+    border-top: 1px solid var(--border); margin-top: 72px;
+    padding: 28px 24px; text-align: center; color: var(--muted); font-size: 13.5px;
+  }
+  footer a { color: var(--muted); }
+
+  /* Anchor offset */
+  section.block { scroll-margin-top: 80px; }
+
+  /* Tags */
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .tag {
+    font-size: 11.5px; padding: 3px 9px; border-radius: 999px;
+    background: var(--code-bg); color: var(--muted); border: 1px solid var(--border);
+  }
+
+  /* Highlight callout */
+  .callout {
+    background: color-mix(in srgb, var(--accent-a) 8%, var(--card));
+    border-left: 3px solid var(--accent-a);
+    padding: 14px 18px; border-radius: var(--radius-sm);
+    margin: 12px 0; font-size: 14.5px;
+  }
+</style>
+</head>
+<body data-theme="light">
+
+<header class="site">
+  <div class="row">
+    <span class="brand">Test Validity Evaluator</span>
+    <nav>
+      <a href="#overview">개요</a>
+      <a href="#mutation">Mutation</a>
+      <a href="#adversarial">Adversarial</a>
+      <a href="#flow">통합 흐름</a>
+      <a href="#usage">사용법</a>
+      <a href="#status">상태</a>
+    </nav>
+    <button class="theme-btn" id="themeBtn" aria-label="테마 전환">🌙 Dark</button>
+  </div>
+</header>
+
+<!-- Hero -->
+<section class="hero">
+  <span class="eyebrow">ADR-1 · ADR-2 기반</span>
+  <h1>테스트가 진짜로 잡고 있는지, 두 축으로 검증합니다</h1>
+  <p class="lead">
+    테스트 작성 에이전트가 만든 테스트는 "통과한다"는 신호만으로 품질을 보증할 수 없습니다.
+    두 개의 Claude Skill이 서로 다른 방향에서 테스트를 흔들어, 약점과 누락을
+    actionable한 finding으로 돌려줍니다.
+  </p>
+
+  <div class="pair">
+    <div class="pill skill-a">
+      <span class="label">Skill A · 민감도</span>
+      <h3>코드를 흔든다</h3>
+      <p>원본 비즈니스 로직에 결정론적·의미 변이를 주입해, 테스트가 변이를 잡는지 측정합니다.</p>
+    </div>
+    <div class="pill skill-b">
+      <span class="label">Skill B · 견고성</span>
+      <h3>테스트를 흔든다</h3>
+      <p>약한 assertion·tautology를 정적 critique로, 경계·상태·fuzz·명세 괴리를 동적 공격으로 드러냅니다.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Overview -->
+<section class="block" id="overview">
+  <h2>개요</h2>
+  <p class="desc">
+    두 스킬은 동일한 오케스트레이터(<code class="inline">test-validity-evaluator</code>) 아래에서 호출되며,
+    공통 디스커버리 산출물(<code class="inline">TestSubjectMap</code>)을 입력으로 받습니다.
+    각 스킬은 자기 책임 범위만 보고, 모든 이력은 <strong>Ledger</strong>에 전수 보존되어 사람이 한 페이지로 검토할 수 있습니다.
+  </p>
+
+  <div class="compare">
+    <div class="skill-card a">
+      <div class="top">
+        <span class="name">llm-based-semantic-mutation-testing</span>
+        <span class="badge">MUTATION · 민감도</span>
+        <p class="desc">AST 결정론 변이 + LLM 의미 변이로 원본을 흔든 뒤, 테스트가 잡는지(killed/survived/timeout/error) 측정.</p>
+      </div>
+      <div class="body">
+        <ul>
+          <li>Survivor마다 "왜 못 잡았나" 진단 → <code class="inline">TestFinding</code></li>
+          <li><code class="inline">MutationLedger</code>에 모든 변이(필터된 것·budget drop 포함) 전수 보존</li>
+          <li>세션 내 캐시로 반복 비용을 <code class="inline">×Δ</code> 수준으로 축소</li>
+        </ul>
+        <div class="tags">
+          <span class="tag">deterministic-first</span>
+          <span class="tag">budget-aware</span>
+          <span class="tag">human-inspectable</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="skill-card b">
+      <div class="top">
+        <span class="name">agentic-adversarial-testing</span>
+        <span class="badge">ADVERSARIAL · 견고성</span>
+        <p class="desc">정적 critique 4종과 동적 adversarial 5종을 결합해 테스트 자체의 약점·누락을 찾는다.</p>
+      </div>
+      <div class="body">
+        <ul>
+          <li>fast static gate로 약한 assertion·tautology·과결합·이름-행위 괴리 탐지</li>
+          <li>critique 신호를 힌트로 표적화된 edge case·boundary·state·fuzz·spec 공격</li>
+          <li><code class="inline">AdversarialLedger</code>에 모든 공격 케이스를 verdict와 함께 보존</li>
+        </ul>
+        <div class="tags">
+          <span class="tag">critique-first</span>
+          <span class="tag">targeted-adversarial</span>
+          <span class="tag">flakiness-gated</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Mutation Skill detail -->
+<section class="block" id="mutation">
+  <h2><span style="color: var(--accent-a)">Skill A</span> — llm-based-semantic-mutation-testing</h2>
+  <p class="desc">테스트가 비즈니스 로직 변형을 잡아내는지 검증하고, 사람 검토용 ledger를 함께 산출합니다.</p>
+
+  <div class="skill-card a">
+    <div class="top">
+      <span class="name">skills/llm-based-semantic-mutation-testing/SKILL.md</span>
+      <span class="badge">META · Skill A</span>
+    </div>
+    <div class="body">
+
+      <details open>
+        <summary>When to use</summary>
+        <div class="content">
+          <ul>
+            <li>변경(diff)이 <strong>비즈니스 로직 분기</strong>를 포함(if/switch, 가격 계산, 권한 체크, 상태 전이).</li>
+            <li><code class="inline">subject-under-test-locator</code>가 <code class="inline">primary_subjects.confidence ≥ 0.7</code>인 테스트를 반환.</li>
+            <li>정책에서 <code class="inline">mutation: enabled</code> (light · normal · max).</li>
+            <li>Adversarial critique 결과 "weak assertion·tautology가 적음" → 정량 신호로 보강이 필요할 때.</li>
+          </ul>
+          <p><strong>호출하지 말아야 할 경우:</strong> tier가 unit이 아닌 테스트, <code class="inline">primary_subjects</code>가 비어 있는 테스트, 어댑터 부재.</p>
+        </div>
+      </details>
+
+      <details>
+        <summary>Input contract</summary>
+        <div class="content">
+          <div class="code-wrap">
+            <button class="copy-btn">복사</button>
+<pre class="code">{
+  "test_target": TestTarget,
+  "test_subject_map": TestSubjectMap,
+  "language_adapter": LanguageAdapter,
+  "policy": {
+    "mode": "light" | "normal" | "max",
+    "budget": {
+      "max_mutants": 200,
+      "max_seconds": 600,
+      "max_tokens": 200000
+    },
+    "scope": {
+      "diff_only": true,
+      "include_files": ["src/**"],
+      "exclude_files": ["**/__generated__/**"]
+    },
+    "operators": {
+      "syntactic_enabled": ["AOR","ROR","COR","LCR","BoundaryShift","ConstantReplace"],
+      "semantic_enabled": true
+    },
+    "equivalence": {
+      "llm_judge": true,
+      "smt_when_available": true,
+      "exclude_from_score": "likely_equivalent"
+    },
+    "session": {
+      "session_id": "evs_…",
+      "cache_enabled": true,
+      "equivalent_mutants_yml": ".testvalidity/equivalent_mutants.yml"
+    }
+  }
+}</pre>
+          </div>
+        </div>
+      </details>
+
+      <details>
+        <summary>Output contract</summary>
+        <div class="content">
+          <div class="code-wrap">
+            <button class="copy-btn">복사</button>
+<pre class="code">{
+  "mutation_report": {
+    "metrics": {
+      "mutation_score": 0.0..1.0,
+      "killed": int, "survived": int, "timeout": int,
+      "error": int, "filtered_equivalent": int,
+      "by_operator": { "AOR": {...}, "Semantic": {...} },
+      "hotspots": [ { "file": "...", "survived": N } ]
+    },
+    "findings": TestFinding[],
+    "mutation_ledger_ref": "ledger/mutation.json",
+    "degradations": [ FailureRecord ],
+    "adapter_summary": {
+      "adapter_key": "...",
+      "adapter_version": "...",
+      "capabilities_used": [...],
+      "capabilities_missing": [...],
+      "skipped_due_to_capability": N
+    }
+  },
+  "mutation_ledger": MutationLedger
+}</pre>
+          </div>
+        </div>
+      </details>
+
+      <details>
+        <summary>Procedure (요약)</summary>
+        <div class="content">
+          <ol>
+            <li><strong>스코핑</strong> — primary_subjects ∩ diff = 변이 대상 span 집합 <code class="inline">S</code>.</li>
+            <li><strong>변이 생성 (병렬)</strong>
+              <ul>
+                <li><code class="inline">mutation-operator-syntactic</code> — 어댑터의 AST 변이.</li>
+                <li><code class="inline">mutation-operator-semantic</code> — LLM이 비즈니스 의도를 추론해 미묘하게 위반.</li>
+              </ul>
+            </li>
+            <li><strong>등가성 필터</strong> — <code class="inline">likely_equivalent</code>는 실행 제외, ledger에는 보존.</li>
+            <li><strong>주입·실행 (mutant마다)</strong> — 캐시 조회 → injector → runner → 롤백 → ledger.</li>
+            <li><strong>진단 (survivor만)</strong> — "왜 못 잡았나" LLM 진단 → <code class="inline">TestFinding</code>.</li>
+            <li><strong>집계</strong> — score, operator별 분포, hotspot.</li>
+          </ol>
+          <div class="callout">
+            <strong>Ledger는 단일 sink가 아니라 각 단계가 부르는 기록기.</strong> 후보·필터된 변이·budget drop까지 모두 시간순으로 보존하여 사람이 "왜 빠졌나"까지 확인할 수 있어야 합니다.
+          </div>
+        </div>
+      </details>
+
+      <details>
+        <summary>Quality bar (불가침)</summary>
+        <div class="content">
+          <ol>
+            <li><strong>증거 인용 필수</strong> — 모든 finding에 <code class="inline">evidence.test_snippet</code>, <code class="inline">evidence.mutant_diff</code>.</li>
+            <li>syntactic이 잡은 것을 semantic이 중복 생성 금지.</li>
+            <li><code class="inline">likely_equivalent</code>는 점수 분모에서 제외.</li>
+            <li>각 단계의 토큰·시간을 ledger에 기록(ROI 분석용).</li>
+            <li>매 mutant 실행 직후 작업 트리 무결성 검증.</li>
+            <li>부분 결과의 정직성 — silent skip 금지.</li>
+            <li>캐시 무효화는 mutant span 단위로 보수적으로.</li>
+          </ol>
+        </div>
+      </details>
+
+      <details>
+        <summary>예시 — 가격 계산 함수의 할인 조건 누락 (Python · pytest)</summary>
+        <div class="content">
+          <p>Semantic 변이 한 건:</p>
+          <div class="code-wrap">
+            <button class="copy-btn">복사</button>
+<pre class="code">{
+  "id": "m_042",
+  "operator": "semantic",
+  "intent": "VIP에서만 적용되는 추가 5% 할인을 STANDARD에도 적용하도록 완화",
+  "file": "src/pricing.py",
+  "span": [55,58],
+  "original": "if user.tier == 'VIP':",
+  "mutated":  "if user.tier in ('VIP', 'STANDARD'):"
+}</pre>
+          </div>
+          <p>Survivor → 진단 결과:</p>
+          <div class="code-wrap">
+            <button class="copy-btn">복사</button>
+<pre class="code">{
+  "id": "f_a1b2c3",
+  "test_id": "tests/test_pricing.py::test_apply_discount_vip",
+  "severity": "major",
+  "category": "missing_case",
+  "evidence": {
+    "test_snippet": "tests/test_pricing.py:18-29",
+    "mutant_diff":  "src/pricing.py:55  - if user.tier == 'VIP':\n               + if user.tier in ('VIP','STANDARD'):"
+  },
+  "suggested_fix":
+    "assert apply_discount(User(tier='STANDARD'), 100) == 90  # 10% base만",
+  "confidence": 0.82,
+  "caused_by_mutants": ["m_042"]
+}</pre>
+          </div>
+        </div>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- Adversarial Skill detail -->
+<section class="block" id="adversarial">
+  <h2><span style="color: var(--accent-b)">Skill B</span> — agentic-adversarial-testing</h2>
+  <p class="desc">테스트 자체를 공격해 약점과 누락을 드러내고, 모든 공격 케이스를 ledger에 보존합니다.</p>
+
+  <div class="skill-card b">
+    <div class="top">
+      <span class="name">skills/agentic-adversarial-testing/SKILL.md</span>
+      <span class="badge">META · Skill B</span>
+    </div>
+    <div class="body">
+
+      <details open>
+        <summary>When to use</summary>
+        <div class="content">
+          <ul>
+            <li>모든 PR/세션의 <strong>fast static gate</strong>로 critique 계열을 먼저 돌릴 때.</li>
+            <li>Mutation 단계의 survivor 진단에서 "약한 assertion·누락 카테고리" 신호가 나와 표적화 보강이 필요할 때.</li>
+            <li>정책에서 <code class="inline">adversarial: enabled</code> (light=critique only · normal · max).</li>
+            <li>보안·결제·권한처럼 적대적 입력이 본질적으로 중요한 도메인.</li>
+          </ul>
+        </div>
+      </details>
+
+      <details>
+        <summary>Input contract</summary>
+        <div class="content">
+          <div class="code-wrap">
+            <button class="copy-btn">복사</button>
+<pre class="code">{
+  "test_target": TestTarget,
+  "test_subject_map": TestSubjectMap,
+  "language_adapter": LanguageAdapter,
+  "policy": {
+    "mode": "light" | "normal" | "max",
+    "budget": {
+      "max_cases_per_generator": 50,
+      "max_seconds": 300,
+      "max_tokens": 150000
+    },
+    "critique": {
+      "enabled_analyzers": ["assertion","tautology","coupling","behavior_naming"],
+      "min_confidence_to_report": 0.6
+    },
+    "adversarial": {
+      "enabled_generators": ["edge_case","boundary","state","fuzzer","spec_divergence"],
+      "execute_dynamic_cases": true,
+      "fuzz": { "framework": "hypothesis|fast-check|auto",
+                "max_examples": 200, "seed": 1337 },
+      "state": { "allow_nondeterminism": false }
+    },
+    "session": {
+      "session_id": "evs_…",
+      "suppressions_yml": ".testvalidity/suppressions.yml"
+    }
+  }
+}</pre>
+          </div>
+        </div>
+      </details>
+
+      <details>
+        <summary>Output contract</summary>
+        <div class="content">
+          <div class="code-wrap">
+            <button class="copy-btn">복사</button>
+<pre class="code">{
+  "red_team_report": {
+    "summary": {
+      "findings_by_severity": { "critical":0, "major":0, "minor":0, "info":0 },
+      "findings_by_category": {
+        "weak_assertion":0, "tautology":0, "over_coupling":0,
+        "name_behavior_mismatch":0, "missed_edge_case":0,
+        "off_by_one":0, "state_violation":0,
+        "fuzz_counterexample":0, "spec_divergence":0
+      },
+      "cases_generated":  N,
+      "cases_executed":   N,
+      "cases_caught_by_existing_test": N,
+      "cases_uncaught":   N
+    },
+    "findings": TestFinding[],
+    "adversarial_ledger_ref": "ledger/adversarial.json",
+    "degradations": [ FailureRecord ],
+    "adapter_summary": {
+      "adapter_key": "...",
+      "capabilities_used": [...],
+      "capabilities_missing": [...],
+      "skipped_due_to_capability": N
+    }
+  },
+  "adversarial_ledger": AdversarialLedger
+}</pre>
+          </div>
+        </div>
+      </details>
+
+      <details>
+        <summary>Procedure — 두 트랙</summary>
+        <div class="content">
+          <p><strong>Track A · 정적 critique (병렬, 결정론 우선)</strong></p>
+          <ul>
+            <li><code class="inline">test-assertion-analyzer</code> — 약한 assertion, 부동소수점 ==, 누락된 negative.</li>
+            <li><code class="inline">test-tautology-detector</code> — 항상 통과, 자기 검증.</li>
+            <li><code class="inline">test-coupling-analyzer</code> — 과도한 mock, private API 접근, 구현 세부 의존.</li>
+            <li><code class="inline">test-behavior-naming-checker</code> — 테스트 이름·docstring과 실제 검증 간 괴리(LLM 비교).</li>
+          </ul>
+          <p><strong>Track B · 동적 adversarial (critique 결과를 힌트로 표적화)</strong></p>
+          <ul>
+            <li><code class="inline">adversarial-edge-case-generator</code> — null/empty/유니코드/타임존/오버플로우.</li>
+            <li><code class="inline">adversarial-boundary-explorer</code> — 경계 상수 ±1, off-by-one.</li>
+            <li><code class="inline">adversarial-state-attacker</code> — 호출 순서·재진입·idempotency 위반.</li>
+            <li><code class="inline">adversarial-input-fuzzer</code> — hypothesis/fast-check 반례.</li>
+            <li><code class="inline">spec-divergence-prober</code> — 주석·docstring vs 실제 동작 차이.</li>
+          </ul>
+          <p>각 케이스는 <code class="inline">verdict ∈ {caught_by_existing_test, uncaught, inconclusive}</code>로 분류되어 ledger에 적재되며, <strong>uncaught만</strong> finding 후보.</p>
+          <div class="callout">
+            <strong>표적화 룰:</strong> Track A에서 "weak_assertion·tautology"가 나오면 edge_case·fuzzer +,
+            "name_behavior_mismatch"가 나오면 spec_divergence ++,
+            "over_coupling"이 나오면 state +.
+          </div>
+        </div>
+      </details>
+
+      <details>
+        <summary>Quality bar (불가침)</summary>
+        <div class="content">
+          <ol>
+            <li>증거 인용 필수 — critique은 <code class="inline">test_snippet</code>, 동적은 <code class="inline">case_repr</code>.</li>
+            <li>State attacker가 만든 비결정 케이스는 <strong>3회 연속 동일 verdict</strong>일 때만 finding 승격.</li>
+            <li>Critique confidence 임계 미만은 <code class="inline">severity=info</code> 강등.</li>
+            <li>공격 케이스의 "적절성"도 ledger 항목 — 통과/실패 무관하게 전수 보존.</li>
+            <li>Suggested fix는 추상 문구 금지. 입력값·기대값을 가진 코드 조각.</li>
+            <li>Silent skip 금지 — <code class="inline">degradations</code>·<code class="inline">notices</code>에 사유 기록.</li>
+            <li>Suppression 환류 준수 — 같은 false positive가 두 번 보이면 안 됨.</li>
+          </ol>
+        </div>
+      </details>
+
+      <details>
+        <summary>예시 — 약한 assertion + 누락된 경계 (Python · pytest)</summary>
+        <div class="content">
+          <p>대상 테스트:</p>
+          <div class="code-wrap">
+            <button class="copy-btn">복사</button>
+<pre class="code">def test_apply_discount_returns_a_number():
+    assert apply_discount(User(tier="VIP"), 100) is not None</pre>
+          </div>
+          <p>Track A — <code class="inline">test-assertion-analyzer</code>:</p>
+          <ul>
+            <li>finding <code class="inline">f_001</code>, <code class="inline">category=weak_assertion</code>, confidence 0.93, severity major.</li>
+            <li><code class="inline">suggested_fix</code>: <code class="inline">assert apply_discount(User(tier='VIP'), 100) == 85</code>.</li>
+          </ul>
+          <p>Track B — <code class="inline">adversarial-boundary-explorer</code> (A의 신호로 가중치 +):</p>
+          <ul>
+            <li>케이스 <code class="inline">c_017</code>: <code class="inline">(User(tier='VIP'), 0)</code> → SUT가 음수 반환. 기존 테스트 못 잡음.</li>
+            <li>ledger <code class="inline">verdict=uncaught</code>, finding <code class="inline">f_002</code>, <code class="inline">category=off_by_one</code>, severity major.</li>
+          </ul>
+        </div>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- Integration flow -->
+<section class="block" id="flow">
+  <h2>두 스킬은 이렇게 묶입니다</h2>
+  <p class="desc">최상위 오케스트레이터 <code class="inline">test-validity-evaluator</code>가 단일 진입점.
+  두 메소 스킬은 동일한 <code class="inline">TestSubjectMap</code>을 공통 입력으로 받고, 각자의 ledger를 산출한 뒤
+  <code class="inline">validity-report-aggregator</code> → <code class="inline">html-report-renderer</code>로 합쳐집니다.</p>
+
+  <div class="flow">입력: TestTarget, diff, policy
+   │
+   ▼
+[1a] test-tier-classifier         → 비유닛 제외, scope_summary
+   │ (included만 통과)
+   ▼
+[1b] subject-under-test-locator   → TestSubjectMap  ★ 공통 입력
+   │
+   ├─────────────────────────┬─────────────────────────┐
+   ▼                         ▼                         │
+[2] llm-based-semantic-     [3] agentic-               │  (정책에 따라
+    mutation-testing             adversarial-testing   │   병렬/순차)
+   │ MutationReport           │ RedTeamReport          │
+   │ + MutationLedger         │ + AdversarialLedger    │
+   ▼                         ▼                         │
+[4] validity-report-aggregator                          │
+       → ValidityReport (dedupe·우선순위·클러스터링)     │
+   │
+   ▼
+[5] html-report-renderer
+       → report.html (자체 포함)
+   │
+   ▼
+출력: ValidityReport (JSON) + report.html (사람용)</div>
+
+  <div class="callout" style="margin-top: 20px;">
+    <strong>권장 내부 순서.</strong> ① Critique을 fast static gate로 먼저 → ② Mutation은 diff 주변만, syntactic→semantic → ③ Adversarial 동적은 survivor 진단 신호로 표적화 → ④ Aggregation & 렌더.
+  </div>
+</section>
+
+<!-- Usage -->
+<section class="block" id="usage">
+  <h2>사용법</h2>
+  <p class="desc">두 가지 시점의 사용법 — (A) 스킬을 워크스페이스에 두는 방법, (B) 오케스트레이터를 통해 호출하는 방법, (C) 결과를 읽고 환류하는 방법.</p>
+
+  <h3 style="margin-top: 28px;">A. 스킬 배치</h3>
+  <div class="steps">
+    <div class="step">
+      <h4>저장소 구조</h4>
+      <p>워크스페이스에 두 SKILL.md를 디렉터리째 둡니다.</p>
+      <div class="code-wrap" style="margin-top: 10px;">
+        <button class="copy-btn">복사</button>
+<pre class="code">skills/
+  llm-based-semantic-mutation-testing/SKILL.md
+  agentic-adversarial-testing/SKILL.md
+contracts/         # ADR-1 §4 / ADR-2 §3,§4,§5 의 JSON 스키마
+  TestTarget.schema.json
+  TestSubjectMap.schema.json
+  Mutant.schema.json
+  TestFinding.schema.json
+  MutationLedger.schema.json
+  AdversarialLedger.schema.json
+  EvaluationSession.schema.json
+  LanguageAdapter.schema.json
+  adapters/
+    python.pytest.yaml
+    typescript.jest.yaml
+.testvalidity/
+  suppressions.yml         # 사람 환류
+  equivalent_mutants.yml   # 사람 환류</pre>
+      </div>
+    </div>
+    <div class="step">
+      <h4>어댑터 매니페스트 선택</h4>
+      <p>오케스트레이터가 시작 시 <code class="inline">contracts/adapters/*.yaml</code>을 스캔해 <code class="inline">(language, framework)</code>을 정확 매칭합니다. 첫 버전은 <code class="inline">python.pytest</code>, <code class="inline">typescript.jest</code> 두 개.</p>
+    </div>
+    <div class="step">
+      <h4>정책 파일 작성</h4>
+      <p>두 스킬 모두 동일한 <code class="inline">policy.session</code>을 공유하고, 자기 트랙의 <code class="inline">policy.{mutation,critique,adversarial}</code>만 추가로 읽습니다.</p>
+    </div>
+  </div>
+
+  <h3 style="margin-top: 28px;">B. 오케스트레이터를 통한 호출</h3>
+  <p class="desc">상위 에이전트 입장에서 도구는 사실상 하나입니다.</p>
+  <div class="code-wrap">
+    <button class="copy-btn">복사</button>
+<pre class="code">tool: evaluate_test_validity
+
+  호출 시점: 테스트를 작성/수정한 직후
+  입력:
+    - test_target: 변경된 소스·테스트 파일들
+    - diff:        PR diff (옵션)
+    - policy:      mode + budget + scope
+  출력:
+    - ValidityReport (JSON)
+    - report.html   (자체 포함 단일 파일)
+  후속 행동:
+    severity ≥ major인 finding에 대해 테스트 보강 →
+    재호출 (EvaluationSession이 recurrence_blocked로 무한루프 차단)</pre>
+  </div>
+
+  <p style="margin-top: 16px;">반복 평가 루프(evaluate → fix → re-evaluate)는 반드시 <code class="inline">EvaluationSession</code>을 통과합니다. 종료 조건:</p>
+  <ul>
+    <li><code class="inline">target_reached</code> — score ≥ target AND major+ == 0 (converged)</li>
+    <li><code class="inline">recurrence_blocked</code> — 같은 finding_id가 fixed 주장 후 2회+ 재등장 (terminated)</li>
+    <li><code class="inline">max_iterations</code> — 기본 5회 (terminated)</li>
+    <li><code class="inline">plateau</code> — 연속 2회 major+ 감소 없음 AND score 개선 ≤ 0.5%p (terminated)</li>
+    <li><code class="inline">wontfix_only</code> — 남은 finding 전부 suppressed (converged)</li>
+    <li><code class="inline">budget_exhausted</code> — 토큰/시간 한도 (terminated)</li>
+  </ul>
+
+  <h3 style="margin-top: 28px;">C. 결과 읽기와 환류</h3>
+  <p class="desc"><code class="inline">report.html</code>은 자체 포함 단일 파일이며 PR 코멘트·CI 아티팩트로 첨부 가능합니다. 사람 환류 버튼은 다음 세션의 동작을 바꿉니다.</p>
+  <ul>
+    <li><code class="inline">[mark equivalent]</code> → <code class="inline">.testvalidity/equivalent_mutants.yml</code>에 mutant_id 기록. 다음 세션의 generator가 재생성하지 않거나 filter가 <code class="inline">force_equivalent</code>로 분류.</li>
+    <li><code class="inline">[mark wontfix]</code> → <code class="inline">.testvalidity/suppressions.yml</code>에 finding_id 기록. 표시되되 <code class="inline">suppressed=true</code>로 게이트.</li>
+    <li><code class="inline">[annotate fix idea]</code> → 자유 텍스트가 ledger의 해당 레코드에 첨부.</li>
+  </ul>
+
+  <h3 style="margin-top: 28px;">D. 호출 시나리오 세 가지</h3>
+  <div class="compare">
+    <div class="step" style="padding-left: 22px;">
+      <h4>작은 변경</h4>
+      <p>critique 트랙 + mutation light. 토큰 절감, 빠른 신호 위주.</p>
+      <pre class="code" style="margin-top: 10px;">policy.mode = "light"
+mutation.budget.max_mutants = 40
+adversarial.enabled_generators = ["edge_case"]</pre>
+    </div>
+    <div class="step" style="padding-left: 22px;">
+      <h4>복잡한 비즈니스 로직</h4>
+      <p>semantic mutation + adversarial 강화.</p>
+      <pre class="code" style="margin-top: 10px;">policy.mode = "normal"
+mutation.operators.semantic_enabled = true
+adversarial.enabled_generators = ["edge_case","boundary",
+  "state","spec_divergence"]</pre>
+    </div>
+    <div class="step" style="padding-left: 22px;">
+      <h4>안전 민감 (결제·권한)</h4>
+      <p>모든 트랙 max. budget을 크게.</p>
+      <pre class="code" style="margin-top: 10px;">policy.mode = "max"
+mutation.budget.max_mutants = 500
+adversarial.fuzz.max_examples = 1000
+state.allow_nondeterminism = true</pre>
+    </div>
+  </div>
+</section>
+
+<!-- Status / honest limits -->
+<section class="block" id="status">
+  <h2>현재 상태와 한계</h2>
+  <p class="desc">두 SKILL.md는 ADR-1·ADR-2 설계 충실도가 높은 명세 문서입니다. 다만 <code class="inline">chrome-cdp</code>처럼 신선한 세션의 Claude가 SKILL.md만 읽고 즉시 실행할 수 있는 단계까지는 도달하지 못했습니다. 솔직한 한계는 다음과 같습니다.</p>
+
+  <div class="status">
+    <h3>● Blocking — 아직 채워야 하는 것</h3>
+    <p>1. <code class="inline">description</code>이 트리거가 아닌 기능 소개 형태. 호출 매칭이 약합니다.</p>
+    <p>2. 17개 primitive("mutation-operator-syntactic" 등)는 이름만 있고 실제 디렉터리·스크립트가 없습니다.</p>
+    <p>3. 핵심 컨트랙트(<code class="inline">TestTarget</code>, <code class="inline">TestSubjectMap</code>, <code class="inline">LanguageAdapter</code> 등)가 ADR-1 §4 / ADR-2 §3·§4 참조로만 존재합니다.</p>
+    <p>4. <code class="inline">contracts/</code>·<code class="inline">.testvalidity/</code> 등 참조된 외부 산출물이 미정의.</p>
+  </div>
+
+  <div class="status">
+    <h3>● Major — 보강하면 더 좋은 것</h3>
+    <p>1. <code class="inline">MutationLedger.records[]</code>·<code class="inline">AdversarialLedger.records[]</code>의 필드 셰입을 Output contract에 인라인.</p>
+    <p>2. Skill B의 <code class="inline">adapter_summary</code>에 <code class="inline">adapter_version</code> 추가.</p>
+    <p>3. <code class="inline">policy.session</code>을 두 스킬이 동일 셰입으로 정의.</p>
+    <p>4. ADR에 없는 <code class="inline">A-mode</code>/<code class="inline">B-mode</code>, <code class="inline">run_ad_hoc_case</code>는 ADR amend로 정식화하거나 제거.</p>
+  </div>
+
+  <p style="margin-top: 24px;">다음 권장 작업은 ADR-2 §10의 우선순위를 따릅니다 — (1) 컨트랙트 JSON 스키마 정리, (2) <code class="inline">test-tier-classifier</code> SKILL.md, (3) <code class="inline">python.pytest</code> 어댑터 매니페스트, (4) <code class="inline">EvaluationSession</code> 통합.</p>
+</section>
+
+<footer>
+  <p>ADR-1 (테스트 유효성 평가 스킬 아키텍처) · ADR-2 (반복 평가·어댑터·유닛 스코핑) 기반.</p>
+  <p>이 페이지는 자체 포함 정적 HTML 한 파일입니다. CSS/JS 인라인, 외부 의존성 0.</p>
+</footer>
+
+<script>
+(function() {
+  // Theme toggle
+  var btn = document.getElementById('themeBtn');
+  var saved = localStorage.getItem('skills_theme');
+  if (saved) { document.body.dataset.theme = saved; updateBtn(); }
+  btn.addEventListener('click', function() {
+    var cur = document.body.dataset.theme === 'dark' ? 'light' : 'dark';
+    document.body.dataset.theme = cur;
+    localStorage.setItem('skills_theme', cur);
+    updateBtn();
+  });
+  function updateBtn() {
+    btn.textContent = document.body.dataset.theme === 'dark' ? '☀️ Light' : '🌙 Dark';
+  }
+
+  // Copy buttons
+  document.querySelectorAll('.copy-btn').forEach(function(b) {
+    b.addEventListener('click', function() {
+      var pre = b.parentElement.querySelector('pre.code');
+      if (!pre) return;
+      var txt = pre.innerText;
+      navigator.clipboard.writeText(txt).then(function() {
+        b.textContent = '복사됨'; b.classList.add('copied');
+        setTimeout(function() {
+          b.textContent = '복사'; b.classList.remove('copied');
+        }, 1400);
+      }).catch(function() {
+        // Fallback
+        var ta = document.createElement('textarea');
+        ta.value = txt; document.body.appendChild(ta);
+        ta.select(); try { document.execCommand('copy'); } catch (e) {}
+        document.body.removeChild(ta);
+        b.textContent = '복사됨'; b.classList.add('copied');
+        setTimeout(function() {
+          b.textContent = '복사'; b.classList.remove('copied');
+        }, 1400);
+      });
+    });
+  });
+
+  // Smooth highlight current nav (simple)
+  var links = document.querySelectorAll('header.site nav a');
+  var sections = Array.from(links)
+    .map(function(a){ return document.querySelector(a.getAttribute('href')); })
+    .filter(Boolean);
+  function onScroll() {
+    var y = window.scrollY + 120;
+    var cur = sections[0];
+    sections.forEach(function(s) { if (s && s.offsetTop <= y) cur = s; });
+    links.forEach(function(a) {
+      a.style.color = (cur && a.getAttribute('href') === '#' + cur.id) ? 'var(--fg)' : '';
+      a.style.background = (cur && a.getAttribute('href') === '#' + cur.id) ? 'var(--code-bg)' : '';
+    });
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+})();
+</script>
+
+</body>
+</html>
