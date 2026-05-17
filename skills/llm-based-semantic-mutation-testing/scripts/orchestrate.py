@@ -167,27 +167,38 @@ def phase_init(args) -> None:
     capability_skips = 0
     notices: list[str] = []
 
-    all_mutants: list[dict] = []
+    # Dedup mutation sources by (file, span) and gather test_ids per unique location.
+    file_span_tests: dict[tuple, set[str]] = {}
     for entry in subject_map if isinstance(subject_map, list) else [subject_map]:
+        test_id = entry.get("test_id", "")
         for subj in entry.get("primary_subjects", []):
-            mutate_path = REPO_ROOT / adapter["implementations"]["syntactic_operator"]
-            cmd = [
-                sys.executable, str(mutate_path),
-                "--file", subj["file"],
-                "--span", str(subj["span"][0]), str(subj["span"][1]),
-                "--operators", *syntactic_ops,
-            ]
-            try:
-                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-                if proc.returncode == 0:
-                    mutants = json.loads(proc.stdout)
-                    for m in mutants:
-                        m["test_id"] = entry.get("test_id")
-                        all_mutants.append(m)
-                else:
-                    notices.append(f"syntactic generation failed for {subj['file']}: {proc.stderr[:120]}")
-            except subprocess.TimeoutExpired:
-                notices.append(f"syntactic timeout on {subj['file']}")
+            key = (subj["file"], tuple(subj["span"]))
+            file_span_tests.setdefault(key, set()).add(test_id)
+
+    all_mutants: list[dict] = []
+    mutate_path = REPO_ROOT / adapter["implementations"]["syntactic_operator"]
+    mutant_counter = 0
+    for (file, span), test_ids in file_span_tests.items():
+        cmd = [
+            sys.executable, str(mutate_path),
+            "--file", file,
+            "--span", str(span[0]), str(span[1]),
+            "--operators", *syntactic_ops,
+        ]
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            if proc.returncode == 0:
+                mutants = json.loads(proc.stdout)
+                for m in mutants:
+                    mutant_counter += 1
+                    # Rewrite ids to be globally unique across the (file,span) iterations.
+                    m["id"] = f"m_{mutant_counter:04d}"
+                    m["test_ids"] = sorted(test_ids)
+                    all_mutants.append(m)
+            else:
+                notices.append(f"syntactic generation failed for {file}: {proc.stderr[:120]}")
+        except subprocess.TimeoutExpired:
+            notices.append(f"syntactic timeout on {file}")
 
     # Persist candidates + record in ledger.
     for m in all_mutants:
@@ -296,10 +307,10 @@ def phase_execute(args) -> None:
         else:
             tmp = out_dir / f"_mutant_{m['id']}.json"
             tmp.write_text(json.dumps(m))
-            tests = [m.get("test_id")] if m.get("test_id") else []
+            tests = m.get("test_ids") or ([m.get("test_id")] if m.get("test_id") else [])
             cmd = [sys.executable, str(run_path), "--mutant", str(tmp), "--timeout", "30"]
-            if tests and tests[0]:
-                cmd.extend(["--tests"] + tests)
+            if tests:
+                cmd.extend(["--tests"] + [t for t in tests if t])
             proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
             tmp.unlink(missing_ok=True)
             try:

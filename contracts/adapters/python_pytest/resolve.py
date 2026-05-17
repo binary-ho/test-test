@@ -21,6 +21,40 @@ _MOCK_DECORATORS = {"patch", "patch.object", "patch.dict", "patch.multiple"}
 _MOCK_CALLS = {"Mock", "MagicMock", "AsyncMock"}
 
 
+def _find_source_file(test_file: Path, module_name: str) -> Optional[str]:
+    """Best-effort lookup: walk upward from test_file, search common src layouts."""
+    head = module_name.split(".")[0]
+    candidates_rel = [
+        f"{module_name.replace('.', '/')}.py",
+        f"src/{module_name.replace('.', '/')}.py",
+        f"{head}.py",
+        f"src/{head}.py",
+    ]
+    cur = test_file.parent
+    for _ in range(6):
+        for rel in candidates_rel:
+            cand = cur / rel
+            if cand.is_file():
+                return str(cand)
+        cur = cur.parent
+        if cur == cur.parent:
+            break
+    return None
+
+
+def _find_symbol_span(file_path: str, symbol: str) -> list[int]:
+    try:
+        src = Path(file_path).read_text()
+        tree = ast.parse(src)
+    except (OSError, SyntaxError):
+        return [0, 0]
+    target = symbol.split(".")[-1]
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node.name == target:
+            return [node.lineno, getattr(node, "end_lineno", node.lineno)]
+    return [0, 0]
+
+
 def resolve(test_file: str, test_id: str) -> dict:
     src = Path(test_file).read_text()
     tree = ast.parse(src)
@@ -66,11 +100,15 @@ def resolve(test_file: str, test_id: str) -> dict:
                 continue
             module = imports.get(name.split(".")[0])
             if module:
+                source_file = _find_source_file(Path(test_file), module) \
+                              or (module.replace(".", "/") + ".py")
+                span = _find_symbol_span(source_file, name) if Path(source_file).is_file() else \
+                       [getattr(node, "lineno", 0), getattr(node, "end_lineno", 0)]
                 primary.append({
-                    "file": module.replace(".", "/") + ".py",
+                    "file": source_file,
                     "symbol": name,
                     "kind": "function",
-                    "span": [getattr(node, "lineno", 0), getattr(node, "end_lineno", 0)],
+                    "span": span,
                     "evidence": f"{test_file}:{node.lineno}",
                 })
 

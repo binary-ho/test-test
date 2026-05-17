@@ -82,7 +82,7 @@ class Classification:
     decision: str = "needs_review"
 
 
-_PATH_UNIT = re.compile(r"(^|/)tests/unit/|/__tests__/|\.unit\.|_test\.py$|^test_")
+_PATH_UNIT = re.compile(r"(^|/)tests?/unit/|/__tests__/|\.unit\.|/test_\w+\.py$|/\w+_test\.py$|(^|/)tests?/test_")
 _PATH_NON_UNIT = re.compile(r"(^|/)tests/(integration|e2e|smoke)/|/cypress/|/playwright/")
 _ANNOT_TIER = re.compile(r"#\s*@validity:tier\s*=\s*(unit|integration|e2e)")
 _ANNOT_SKIP = re.compile(r"#\s*@validity:skip\b")
