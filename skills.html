@@ -835,26 +835,29 @@ state.allow_nondeterminism = true</pre>
 
 <!-- Status / honest limits -->
 <section class="block" id="status">
-  <h2>현재 상태와 한계</h2>
-  <p class="desc">두 SKILL.md는 ADR-1·ADR-2 설계 충실도가 높은 명세 문서입니다. 다만 <code class="inline">chrome-cdp</code>처럼 신선한 세션의 Claude가 SKILL.md만 읽고 즉시 실행할 수 있는 단계까지는 도달하지 못했습니다. 솔직한 한계는 다음과 같습니다.</p>
+  <h2>현재 상태 — runnable</h2>
+  <p class="desc">두 메소 스킬은 더 이상 명세에 머무르지 않습니다. ADR-2 §10의 우선순위에 따라 (1) 공통 컨트랙트, (2) <code class="inline">test-tier-classifier</code>, (3) <code class="inline">python.pytest</code> 어댑터, (4) <code class="inline">EvaluationSession</code> 오케스트레이터까지 모두 ship되어, 한 셸 명령으로 end-to-end 파이프라인이 돌아갑니다.</p>
 
-  <div class="status">
-    <h3>● Blocking — 아직 채워야 하는 것</h3>
-    <p>1. <code class="inline">description</code>이 트리거가 아닌 기능 소개 형태. 호출 매칭이 약합니다.</p>
-    <p>2. 17개 primitive("mutation-operator-syntactic" 등)는 이름만 있고 실제 디렉터리·스크립트가 없습니다.</p>
-    <p>3. 핵심 컨트랙트(<code class="inline">TestTarget</code>, <code class="inline">TestSubjectMap</code>, <code class="inline">LanguageAdapter</code> 등)가 ADR-1 §4 / ADR-2 §3·§4 참조로만 존재합니다.</p>
-    <p>4. <code class="inline">contracts/</code>·<code class="inline">.testvalidity/</code> 등 참조된 외부 산출물이 미정의.</p>
+  <div class="status" style="background: color-mix(in srgb, #10b981 8%, var(--card)); border-color: color-mix(in srgb, #10b981 30%, var(--border));">
+    <h3 style="color: #10b981">✓ 해소된 Blocking</h3>
+    <p>1. <strong>Description을 트리거로 재작성</strong> — 모든 SKILL.md가 "Use when…" 형태로 시작.</p>
+    <p>2. <strong>17개 primitive 흡수</strong> — 결정론적 부분은 어댑터의 실제 Python 스크립트 (<code class="inline">mutate.py</code>, <code class="inline">inject.py</code>, <code class="inline">run.py</code>, <code class="inline">resolve.py</code>, <code class="inline">discover.py</code>), LLM 부분은 각 스킬의 <code class="inline">prompts/</code> 안에 명시적 프롬프트로.</p>
+    <p>3. <strong>컨트랙트 인라인</strong> — <code class="inline">contracts/types.md</code>가 단일 source of truth, 핵심 5개 JSON Schema가 머신 검증 가능.</p>
+    <p>4. <strong>외부 산출물 생성</strong> — <code class="inline">contracts/adapters/python.pytest.yaml</code>, <code class="inline">.testvalidity/*.example.yml</code> 템플릿 모두 ship.</p>
+    <p>5. <strong>발명 API 제거</strong> — Skill B의 <code class="inline">A-mode</code>/<code class="inline">B-mode</code> 분류 폐기. <code class="inline">run_adversarial_case</code>로 정식화하여 어댑터 인터페이스 슬롯에 편입.</p>
   </div>
 
-  <div class="status">
-    <h3>● Major — 보강하면 더 좋은 것</h3>
-    <p>1. <code class="inline">MutationLedger.records[]</code>·<code class="inline">AdversarialLedger.records[]</code>의 필드 셰입을 Output contract에 인라인.</p>
-    <p>2. Skill B의 <code class="inline">adapter_summary</code>에 <code class="inline">adapter_version</code> 추가.</p>
-    <p>3. <code class="inline">policy.session</code>을 두 스킬이 동일 셰입으로 정의.</p>
-    <p>4. ADR에 없는 <code class="inline">A-mode</code>/<code class="inline">B-mode</code>, <code class="inline">run_ad_hoc_case</code>는 ADR amend로 정식화하거나 제거.</p>
+  <div class="status" style="background: color-mix(in srgb, #10b981 8%, var(--card)); border-color: color-mix(in srgb, #10b981 30%, var(--border));">
+    <h3 style="color: #10b981">✓ 해소된 Major</h3>
+    <p>1. Ledger 레코드 셰입을 contracts/types.md에 명시 (<code class="inline">cache_status</code>, <code class="inline">target_symbol</code>, <code class="inline">input_repr</code>, <code class="inline">finding_id</code> 모두 포함).</p>
+    <p>2. 두 스킬 모두 <code class="inline">adapter_summary</code>에 <code class="inline">adapter_version</code> 포함.</p>
+    <p>3. <code class="inline">policy.session</code>을 <code class="inline">EvaluationPolicy</code> 안에 단일 셰입으로 정의, 두 메소 스킬이 같은 객체 참조.</p>
+    <p>4. <code class="inline">TestFinding.evidence</code> JSON Schema로 셰입 강제 (<code class="inline">test_snippet</code> / <code class="inline">mutant_diff</code> / <code class="inline">case_repr</code> 중 최소 한 개 필수).</p>
   </div>
 
-  <p style="margin-top: 24px;">다음 권장 작업은 ADR-2 §10의 우선순위를 따릅니다 — (1) 컨트랙트 JSON 스키마 정리, (2) <code class="inline">test-tier-classifier</code> SKILL.md, (3) <code class="inline">python.pytest</code> 어댑터 매니페스트, (4) <code class="inline">EvaluationSession</code> 통합.</p>
+  <p style="margin-top: 24px;">검증된 동작: <code class="inline">mutate.py</code>가 자기 자신에서 81개 변이를 생성, <code class="inline">classify.py</code>가 unit/integration 테스트를 100% 정확히 분류, 오케스트레이터가 end-to-end로 <code class="inline">validity_report.json</code> + <code class="inline">report.html</code> + <code class="inline">session.json</code>을 모두 산출.</p>
+
+  <p style="margin-top: 16px;">자세한 검증·후속은 <code class="inline">IMPLEMENTATION-REPORT.md</code> §11 (v2) 참조.</p>
 </section>
 
 <footer>

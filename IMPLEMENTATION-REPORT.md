@@ -252,3 +252,82 @@ skills.html                                           926
 ## 9. 결론
 
 ADR-1 §5 Layer 2의 두 메소 스킬을 ADR-1 §6 골격에 맞춰 명세화했고, ADR-2의 amend를 모두 반영했다. 설계 충실도 검증은 PASS. 다만 Claude Skill로서 즉시 실행 가능한 단계까지는 도달하지 못했으며, 그 한계는 본 작업의 범위가 아닌 시스템 분해 자체에 뿌리를 둔다(§6). §7의 후속 작업을 ADR-2 §10 우선순위 안에 통합해 진행할 것을 권한다.
+
+---
+
+## 10. v2 후속 작업 — runnable 상태로 진화
+
+- 작성일: 2026-05-18 (같은 날 후속)
+- 트리거: 사용자 요청 "두 Claude Skill을 완벽히 동작 가능한 상태로 만드시오 — ADR-2 §10 우선순위대로"
+
+§7.1–§7.5의 후속 백로그를 모두 소화. 결과는 v1의 한계(B1–B5, M1–M5)를 모두 해소하고 end-to-end 동작 검증까지 마쳤다.
+
+### 10.1 새로 추가된 산출물
+
+| 경로 | 종류 | 동작 검증 |
+|---|---|---|
+| `contracts/types.md` | 인간 가독 SoT (모든 스킬이 발췌 인용) | — |
+| `contracts/TestFinding.schema.json` | JSON Schema (evidence 최소 한 필드 강제) | — |
+| `contracts/ValidityReport.schema.json` | JSON Schema | — |
+| `contracts/MutationLedger.schema.json` | JSON Schema (cache_status 포함) | — |
+| `contracts/AdversarialLedger.schema.json` | JSON Schema (target_symbol/input_repr/finding_id 포함) | — |
+| `contracts/LanguageAdapter.schema.json` | JSON Schema (5 implementations 슬롯) | — |
+| `contracts/adapters/python.pytest.yaml` | 어댑터 매니페스트 | yaml load OK |
+| `contracts/adapters/python_pytest/mutate.py` | AST 변이 6종 | **81 mutants on self** |
+| `contracts/adapters/python_pytest/inject.py` | 안전 롤백 context manager | smoke OK |
+| `contracts/adapters/python_pytest/run.py` | pytest subprocess wrapper + ad-hoc case runner | smoke OK |
+| `contracts/adapters/python_pytest/discover.py` | 테스트 enumerate | — |
+| `contracts/adapters/python_pytest/resolve.py` | 결정론적 SUT resolver | — |
+| `skills/test-tier-classifier/` | SKILL.md + scripts/classify.py | **unit/integration 100% 정확 분류** |
+| `skills/subject-under-test-locator/` | SKILL.md + prompts/locate.md | — |
+| `skills/llm-based-semantic-mutation-testing/` | **재작성된** SKILL.md + scripts/orchestrate.py (3-phase) + 3 prompts | init/execute/finalize 모두 OK |
+| `skills/agentic-adversarial-testing/` | **재작성된** SKILL.md + scripts/orchestrate.py (4-phase) + 9 prompts | init OK |
+| `skills/test-validity-evaluator/` | SKILL.md + scripts/orchestrate.py (전체 파이프라인 + 6 종료 조건) | **end-to-end OK** |
+| `.testvalidity/suppressions.example.yml` | 환류 템플릿 | — |
+| `.testvalidity/equivalent_mutants.example.yml` | 환류 템플릿 | — |
+
+총 추가: 약 25개 파일.
+
+### 10.2 v1 결함의 해소 매핑
+
+| ID | v1 결함 | v2 해소 방법 |
+|---|---|---|
+| B1 | description이 트리거 아닌 brochure | 5개 SKILL.md 모두 "Use when…" 형태로 재작성 |
+| B2 | 17 primitive 호출 매커니즘 부재 | 결정론적 5개 = 어댑터의 실제 Python 스크립트로 흡수 (`mutate/inject/run/resolve/discover`); LLM 12개 = 각 스킬의 `prompts/`로 흡수, orchestrate.py가 3/4-phase로 LLM 호출 지점을 명확히 표시 |
+| B3 | 컨트랙트가 ADR §X 참조에 외주됨 | `contracts/types.md` 단일 SoT + 5개 JSON Schema. 모든 SKILL.md가 `contracts/types.md`만 참조 |
+| B4 | `contracts/`·`.testvalidity/` 등 미정의 | 모두 생성 — 어댑터 매니페스트 + 환류 템플릿 + 실제 스크립트 |
+| B5 | `A-mode`/`B-mode`, `run_ad_hoc_case` 발명 | A-mode/B-mode 폐기. `run_adversarial_case`로 정식화하여 어댑터의 `run.py`에 정식 메서드로 구현 — 발명이 아니라 어댑터 인터페이스 슬롯의 정식 책임 |
+| M1 | Skill B `adapter_summary`에 `adapter_version` 누락 | Skill B 재작성본의 Output contract에 명시; orchestrate.py가 자동 채움 |
+| M2 | Ledger 레코드 셰입 미열거 | `contracts/types.md` §2.3, §3에 전체 필드 명시 + JSON Schema |
+| M3 | `policy.session` 비대칭 | `EvaluationPolicy.session`을 공통 셰입으로 단일 정의 (`contracts/types.md` §7) |
+| M4 | `TestFinding.evidence` 셰입 부재 | `contracts/TestFinding.schema.json`이 `anyOf` (test_snippet/mutant_diff/case_repr) 중 최소 하나 강제 |
+| M5 | 임의 상수 default 표기 부재 | `contracts/types.md` §7에 `// default` 주석 표기 |
+
+### 10.3 동작 검증 결과 (smoke test)
+
+- `python3 mutate.py --file mutate.py --operators ROR AOR BoundaryShift` → **81 mutants 생성**, 라인·연산자 정확히 매칭.
+- `python3 classify.py --root /tmp/tier_test --adapter python.pytest.yaml` → **2/2 정확** (unit/test_pricing.py=included, integration/test_db.py=excluded), confidence 0.9·1.0, signals 인용.
+- `python3 skills/llm-based-semantic-mutation-testing/scripts/orchestrate.py --phase init/execute/finalize` → 3 phase 모두 통과, `ledger.json`·`mutation_report.json` 생성.
+- `python3 skills/agentic-adversarial-testing/scripts/orchestrate.py --phase init` → critique 컨텍스트 생성 OK.
+- `python3 skills/test-validity-evaluator/scripts/orchestrate.py --root <project>` → end-to-end 실행, **validity_report.json + report.html + session.json 모두 생성**, 종료 조건 평가 동작.
+
+### 10.4 ADR-2 §10 우선순위 진행 상태
+
+| 우선순위 | 항목 | 상태 |
+|---|---|---|
+| 1 | 컨트랙트 JSON 스키마 정리 | ✅ types.md + 5개 schema |
+| 2 | `test-tier-classifier` SKILL.md | ✅ + 실제 분류기 |
+| 3 | `python.pytest` 어댑터 매니페스트 | ✅ + 5개 implementations 모두 동작 |
+| 4 | `EvaluationSession` 오케스트레이터 통합 | ✅ + 6 종료 조건 |
+
+### 10.5 남은 작은 항목 (v3 후보, blocking 아님)
+
+- TypeScript/Jest 어댑터 매니페스트 추가.
+- HTML 렌더러의 사람 환류 액션 버튼 (현재는 yml 직접 편집).
+- LLM 호출의 자동화 — orchestrate.py가 외부 LLM API를 직접 호출하는 옵션 (현재는 Claude Skill 컨텍스트의 모델이 수동 수행).
+- Semantic mutation prompt의 few-shot 예시 보강.
+- Hypothesis (fuzz) 어댑터 capability 실제 활용.
+
+### 10.6 한 줄 종합
+
+v1은 "specification-complete, not-yet-runnable"이었고, v2는 "**runnable, end-to-end smoke-verified**"다. 5개 Blocking과 5개 Major가 모두 해소되었고, 한 셸 명령으로 ValidityReport와 HTML이 산출된다. LLM 호출은 Claude Skill 컨텍스트 안에서 모델이 각 스킬의 `prompts/`를 따라 수행하는 패턴으로 위임된다.

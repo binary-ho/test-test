@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://test-validity-evaluator/contracts/AdversarialLedger.schema.json",
+  "title": "AdversarialLedger",
+  "type": "object",
+  "required": ["generated_at", "tool_versions", "adapter_key", "records"],
+  "properties": {
+    "generated_at": { "type": "string", "format": "date-time" },
+    "tool_versions": { "type": "object", "additionalProperties": { "type": "string" } },
+    "adapter_key":   { "type": "string" },
+    "records": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["case_id","generator","target_symbol","verdict"],
+        "properties": {
+          "case_id":   { "type": "string" },
+          "generator": {
+            "enum": [
+              "edge_case","boundary","state","fuzzer","spec_divergence",
+              "critique:assertion","critique:tautology","critique:coupling","critique:behavior_naming"
+            ]
+          },
+          "target_symbol":     { "type": "string" },
+          "input_repr":        { "type": "string" },
+          "expected_behavior": { "type": "string" },
+          "observed_behavior": { "type": "string" },
+          "verdict": { "enum": ["caught_by_existing_test","uncaught","inconclusive"] },
+          "finding_id": { "type": "string" },
+          "suppressed": { "type": "boolean", "default": false }
+        }
+      }
+    }
+  }
+}
