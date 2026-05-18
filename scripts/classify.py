@@ -21,22 +21,20 @@ from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Optional
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _common import SKILL_ROOT, load_yaml as _load_yaml  # noqa: E402
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
 
-
-# ---- minimal YAML loader (adapter manifests use simple subset) -------------
-
-def _load_yaml(path: Path) -> dict:
-    try:
-        import yaml  # type: ignore
-        return yaml.safe_load(path.read_text())
-    except ImportError:
-        return _parse_minimal_yaml(path.read_text())
+REPO_ROOT = SKILL_ROOT  # back-compat alias for any external imports
 
 
 def _parse_minimal_yaml(text: str) -> dict:
-    """Tiny YAML subset: scalar key:value, nested maps, '- value' lists."""
+    """Tiny YAML subset: scalar key:value, nested maps, '- value' lists.
+
+    A key registered with an empty value is provisionally a nested map; the
+    first '- value' line at deeper indent retroactively converts it to a list
+    on its parent dict.
+    """
     root: dict = {}
     stack = [(0, root)]
     last_list_key: Optional[tuple[int, str]] = None
@@ -52,8 +50,14 @@ def _parse_minimal_yaml(text: str) -> dict:
             item = line[2:].strip().strip("\"'")
             if last_list_key:
                 parent_indent, key = last_list_key
-                parent = stack[-1][1] if stack[-1][0] == parent_indent else ctx
-                parent.setdefault(key, []).append(item)
+                # Find the parent dict at the recorded indent and convert its
+                # key to a list (replacing the placeholder empty dict).
+                for s_indent, s_ctx in stack:
+                    if s_indent == parent_indent and isinstance(s_ctx, dict):
+                        if not isinstance(s_ctx.get(key), list):
+                            s_ctx[key] = []
+                        s_ctx[key].append(item)
+                        break
             continue
         if ":" in line:
             k, _, v = line.partition(":")

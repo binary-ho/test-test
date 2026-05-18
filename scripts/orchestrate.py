@@ -25,10 +25,11 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _common import SKILL_ROOT, SCRIPTS_DIR, load_yaml  # noqa: E402
 
-THIS_DIR = Path(__file__).resolve().parent
-REPO_ROOT = THIS_DIR.parent.parent.parent
-SKILLS_DIR = REPO_ROOT / "skills"
+
+REPO_ROOT = SKILL_ROOT
 
 
 def _now() -> str:
@@ -40,15 +41,8 @@ def _run(cmd: list[str], **kw) -> subprocess.CompletedProcess:
 
 
 def _load_adapter(adapter_path: Path) -> dict:
-    """Load an adapter manifest; reuse the tier-classifier's minimal YAML parser."""
-    try:
-        import yaml  # type: ignore
-        return yaml.safe_load(adapter_path.read_text())
-    except ImportError:
-        cls_path = REPO_ROOT / "skills" / "test-tier-classifier" / "scripts"
-        sys.path.insert(0, str(cls_path))
-        from classify import _parse_minimal_yaml  # type: ignore
-        return _parse_minimal_yaml(adapter_path.read_text())
+    """Load an adapter manifest via the shared loader (PyYAML or minimal fallback)."""
+    return load_yaml(adapter_path)
 
 
 def _session_root(out_root: Path, session_id: str) -> Path:
@@ -193,7 +187,7 @@ def run_iteration(args, iter_dir: Path) -> dict:
     # [1a] tier classification
     tier_path = iter_dir / "tier.json"
     _run([sys.executable,
-          str(SKILLS_DIR / "test-tier-classifier" / "scripts" / "classify.py"),
+          str(SCRIPTS_DIR / "classify.py"),
           "--root", args.root, "--adapter", args.adapter, "--out", str(tier_path)])
     tier = json.loads(tier_path.read_text())
     included = [t for t in tier if t["decision"] == "included"]
@@ -245,7 +239,7 @@ def run_iteration(args, iter_dir: Path) -> dict:
 
     # ---- mutation pipeline -----
     mutation_out = iter_dir / "mutation"
-    mutation_orch = SKILLS_DIR / "llm-based-semantic-mutation-testing" / "scripts" / "orchestrate.py"
+    mutation_orch = SCRIPTS_DIR / "mutation_orchestrate.py"
     policy_path = Path(args.policy).resolve()
     _run([sys.executable, str(mutation_orch),
           "--phase", "init",
@@ -264,7 +258,7 @@ def run_iteration(args, iter_dir: Path) -> dict:
 
     # ---- adversarial pipeline -----
     adv_out = iter_dir / "adversarial"
-    adv_orch = SKILLS_DIR / "agentic-adversarial-testing" / "scripts" / "orchestrate.py"
+    adv_orch = SCRIPTS_DIR / "adversarial_orchestrate.py"
     _run([sys.executable, str(adv_orch),
           "--phase", "init",
           "--subject-map", str((iter_dir / "subject_map.json").resolve()),
