@@ -1,5 +1,8 @@
 # 구현 보고서 — Test Validity Evaluator: 두 메소 스킬
 
+> **Note (2026-05-18 이후)** — 이 문서는 평탄화 이전 시점의 구현 보고서입니다. 명령 예시가 `skills/<name>/scripts/...` 옛 경로를 가리키지만, 현재 패키지에서는 `scripts/{orchestrate,mutation_orchestrate,adversarial_orchestrate,classify}.py`로 평탄화되어 있습니다.
+> 현재 유효한 invoke 경로는 루트 `SKILL.md` 또는 `README.md`를 참조.
+
 - 작성일: 2026-05-18
 - 작업자: binary-ho
 - 컨텍스트 입력: ADR-1 (테스트 유효성 평가 스킬 아키텍처), ADR-2 (반복 평가·어댑터·유닛 스코핑)

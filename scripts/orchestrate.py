@@ -25,10 +25,11 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _common import SKILL_ROOT, SCRIPTS_DIR, load_yaml  # noqa: E402
 
-THIS_DIR = Path(__file__).resolve().parent
-REPO_ROOT = THIS_DIR.parent.parent.parent
-SKILLS_DIR = REPO_ROOT / "skills"
+
+REPO_ROOT = SKILL_ROOT
 
 
 def _now() -> str:
@@ -37,6 +38,11 @@ def _now() -> str:
 
 def _run(cmd: list[str], **kw) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True, **kw)
+
+
+def _load_adapter(adapter_path: Path) -> dict:
+    """Load an adapter manifest via the shared loader (PyYAML or minimal fallback)."""
+    return load_yaml(adapter_path)
 
 
 def _session_root(out_root: Path, session_id: str) -> Path:
@@ -181,14 +187,22 @@ def run_iteration(args, iter_dir: Path) -> dict:
     # [1a] tier classification
     tier_path = iter_dir / "tier.json"
     _run([sys.executable,
-          str(SKILLS_DIR / "test-tier-classifier" / "scripts" / "classify.py"),
+          str(SCRIPTS_DIR / "classify.py"),
           "--root", args.root, "--adapter", args.adapter, "--out", str(tier_path)])
     tier = json.loads(tier_path.read_text())
     included = [t for t in tier if t["decision"] == "included"]
 
     # [1b] subject location (deterministic only here; LLM boost would happen externally)
     subject_map: list[dict] = []
-    resolve_py = REPO_ROOT / "contracts" / "adapters" / "python_pytest" / "resolve.py"
+    adapter_manifest = _load_adapter(Path(args.adapter))
+    resolver_rel = adapter_manifest.get("implementations", {}).get("subject_resolver")
+    if not resolver_rel:
+        raise RuntimeError(
+            f"Adapter {args.adapter} has no implementations.subject_resolver — cannot resolve subjects."
+        )
+    resolve_py = (REPO_ROOT / resolver_rel).resolve()
+    if not resolve_py.is_file():
+        raise FileNotFoundError(f"subject_resolver not found at {resolve_py}")
     for t in included:
         proc = _run([sys.executable, str(resolve_py),
                      "--test-file", t["test_file"], "--test-id", t["test_id"]])
@@ -225,7 +239,7 @@ def run_iteration(args, iter_dir: Path) -> dict:
 
     # ---- mutation pipeline -----
     mutation_out = iter_dir / "mutation"
-    mutation_orch = SKILLS_DIR / "llm-based-semantic-mutation-testing" / "scripts" / "orchestrate.py"
+    mutation_orch = SCRIPTS_DIR / "mutation_orchestrate.py"
     policy_path = Path(args.policy).resolve()
     _run([sys.executable, str(mutation_orch),
           "--phase", "init",
@@ -244,7 +258,7 @@ def run_iteration(args, iter_dir: Path) -> dict:
 
     # ---- adversarial pipeline -----
     adv_out = iter_dir / "adversarial"
-    adv_orch = SKILLS_DIR / "agentic-adversarial-testing" / "scripts" / "orchestrate.py"
+    adv_orch = SCRIPTS_DIR / "adversarial_orchestrate.py"
     _run([sys.executable, str(adv_orch),
           "--phase", "init",
           "--subject-map", str((iter_dir / "subject_map.json").resolve()),

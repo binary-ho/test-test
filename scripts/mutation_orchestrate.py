@@ -37,10 +37,11 @@ from pathlib import Path
 from typing import Optional
 
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _common import SKILL_ROOT, ADAPTERS_DIR as ADAPTER_DIR, load_yaml  # noqa: E402
+
 THIS_DIR = Path(__file__).resolve().parent
-SKILL_DIR = THIS_DIR.parent
-REPO_ROOT = SKILL_DIR.parent.parent
-ADAPTER_DIR = REPO_ROOT / "contracts" / "adapters"
+REPO_ROOT = SKILL_ROOT
 
 
 # ---------- ledger ----------
@@ -125,18 +126,10 @@ def _force_equivalent_signatures(eq_yml: Path) -> set[str]:
     return out
 
 
-# ---------- adapter loading (minimal yaml) ----------
+# ---------- adapter loading (delegated to shared loader) ----------
 
 def _load_yaml(p: Path) -> dict:
-    try:
-        import yaml  # type: ignore
-        return yaml.safe_load(p.read_text())
-    except ImportError:
-        # Reuse the tier-classifier's parser
-        cls_path = REPO_ROOT / "skills" / "test-tier-classifier" / "scripts" / "classify.py"
-        sys.path.insert(0, str(cls_path.parent))
-        from classify import _parse_minimal_yaml  # type: ignore
-        return _parse_minimal_yaml(p.read_text())
+    return load_yaml(p)
 
 
 # ---------- phase 1: init (syntactic generation + semantic prompt) ----------

@@ -1,0 +1,52 @@
+key: kotlin.junit
+language: kotlin
+framework: junit5
+version: 0.1.0
+maintainer: binary-ho
+
+capabilities:
+  supports_async:              true
+  supports_property_based:     false
+  supports_parameterized:      true     # via @ParameterizedTest
+  supports_parallel_execution: false
+  syntactic_operators:
+    - AOR
+    - ROR
+    - COR
+    - LCR
+    - BoundaryShift
+    - ConstantReplace
+
+# Recognized as a test-tier "framework_marker" annotation when present.
+framework_marker_pattern: "@(Tag\\(\"(integration|e2e|slow)\"\\)|SpringBootTest|Testcontainers)"
+
+implementations:
+  test_discoverer:    contracts/adapters/kotlin_junit/discover.py
+  subject_resolver:   contracts/adapters/kotlin_junit/resolve.py
+  syntactic_operator: contracts/adapters/kotlin_junit/mutate.py
+  injector:           contracts/adapters/kotlin_junit/inject.py
+  runner:             contracts/adapters/kotlin_junit/run.py
+
+tier_heuristic_dictionary:
+  db_imports:
+    - org.springframework.data
+    - org.jdbi
+    - javax.persistence
+    - jakarta.persistence
+    - org.jetbrains.exposed
+    - com.zaxxer.hikari
+    - org.testcontainers
+  network_imports:
+    - org.springframework.web.client
+    - okhttp3
+    - retrofit2
+    - io.ktor.client
+    - org.springframework.boot.test.web.client
+  driver_imports:
+    - org.openqa.selenium
+    - com.microsoft.playwright
+    - org.springframework.boot.test.context.SpringBootTest
+  mock_libs:
+    - io.mockk
+    - org.mockito
+    - com.ninja_squad.springmockk

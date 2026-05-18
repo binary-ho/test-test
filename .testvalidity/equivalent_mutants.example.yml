@@ -2,8 +2,10 @@
 # treat as `force_equivalent` (no execution, no scoring impact, ledger
 # retains the record with execution_status="filtered_equivalent").
 #
-# Loaded by `skills/llm-based-semantic-mutation-testing/scripts/orchestrate.py`
-# at the equivalence-filter step.
+# Loaded by `~/.claude/skills/test-validity-evaluator/scripts/mutation_orchestrate.py`
+# at the equivalence-filter step. Path in evaluation_policy.json points here:
+#   policy.session.equivalent_mutants_yml: ".testvalidity/equivalent_mutants.yml"
+# (resolved cwd-relative — keep this file in the target repo, not in the skill package.)
 #
 # Schema:
 #   - mutant_signature_hash: "sha256:<16-hex>"   # match the value emitted by mutate.py
