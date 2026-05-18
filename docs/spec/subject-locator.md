@@ -5,6 +5,10 @@ description: Use AFTER test-tier-classifier and BEFORE the mutation or adversari
 
 # subject-under-test-locator
 
+> **Spec doc (internal)** — 이 문서는 `test-validity-evaluator` 패키지 내부 sub-skill의 설계 사양입니다.
+> Claude Code 자동 트리거 대상은 패키지 루트의 `SKILL.md`(`test-validity-evaluator`) 하나뿐. 이 sub-skill은 그 오케스트레이터에서 어댑터의 `subject_resolver` 경유로 호출됩니다.
+> 직접 실행: `python3 ~/.claude/skills/test-validity-evaluator/contracts/adapters/<lang>_<framework>/resolve.py ...`
+
 테스트가 *증명*하려 하는 비즈니스 로직 위치를 추론. 이후 모든 메소 스킬의 공통 입력을 생산하므로, 여기서 잘못 잡으면 파이프라인 전체가 오염됩니다.
 
 ## When to use
@@ -19,7 +23,7 @@ description: Use AFTER test-tier-classifier and BEFORE the mutation or adversari
 어댑터의 `subject_resolver`를 셸 호출.
 
 ```bash
-python3 contracts/adapters/python_pytest/resolve.py \
+python3 ~/.claude/skills/test-validity-evaluator/contracts/adapters/python_pytest/resolve.py \
     --test-file tests/unit/test_pricing.py \
     --test-id   "tests/unit/test_pricing.py::test_apply_discount_vip"
 ```

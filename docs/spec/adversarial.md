@@ -5,6 +5,10 @@ description: Use when the user wants to find weaknesses INSIDE the tests themsel
 
 # agentic-adversarial-testing
 
+> **Spec doc (internal)** — 이 문서는 `test-validity-evaluator` 패키지 내부 sub-skill의 설계 사양입니다.
+> Claude Code 자동 트리거 대상은 패키지 루트의 `SKILL.md`(`test-validity-evaluator`) 하나뿐. 이 sub-skill은 그 오케스트레이터에서 subprocess로 호출됩니다.
+> 직접 실행: `python3 ~/.claude/skills/test-validity-evaluator/scripts/adversarial_orchestrate.py ...`
+
 원본 코드를 흔드는 대신 *테스트 자체*를 공격해 약점·누락을 드러냄. 정적 critique과 동적 adversarial 두 트랙. 모든 공격 케이스(통과/실패/오류/필터링) 전수 보존.
 
 ## When to use
@@ -22,12 +26,14 @@ description: Use when the user wants to find weaknesses INSIDE the tests themsel
 ## How to invoke
 
 ```bash
-python3 skills/agentic-adversarial-testing/scripts/orchestrate.py \
+python3 ~/.claude/skills/test-validity-evaluator/scripts/adversarial_orchestrate.py \
+    --phase init \
     --subject-map subject_map.json \
-    --adapter contracts/adapters/python.pytest.yaml \
+    --adapter ~/.claude/skills/test-validity-evaluator/contracts/adapters/python.pytest.yaml \
     --policy policy.json \
     --session-id evs_2026-05-18_a1b2 \
     --out-dir out/adversarial/
+# 이후 --phase generate, --phase execute, --phase finalize 차례 호출
 ```
 
 orchestrate.py는 Skill A와 동일하게 3-phase 모델:
@@ -134,7 +140,7 @@ orchestrate.py는 Skill A와 동일하게 3-phase 모델:
 orchestrate.py가 각 `AdversarialCase`에 대해:
 
 ```bash
-python3 contracts/adapters/python_pytest/run.py --case case.json
+python3 ~/.claude/skills/test-validity-evaluator/contracts/adapters/python_pytest/run.py --case case.json
 ```
 
 run.py는 ad-hoc 테스트 함수를 임시 파일로 렌더링 → pytest 실행 → 결과로 verdict 결정:

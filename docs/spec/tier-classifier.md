@@ -5,22 +5,25 @@ description: Use BEFORE any test-validity work to filter out non-unit tests. Giv
 
 # test-tier-classifier
 
+> **Spec doc (internal)** — 이 문서는 `test-validity-evaluator` 패키지 내부 sub-skill의 설계 사양입니다.
+> Claude Code 자동 트리거 대상은 패키지 루트의 `SKILL.md`(`test-validity-evaluator`) 하나뿐. 이 sub-skill은 그 오케스트레이터에서 subprocess로 호출됩니다.
+> 직접 실행: `python3 ~/.claude/skills/test-validity-evaluator/scripts/classify.py ...`
+
 신호 가중 분류기로 각 테스트의 tier를 결정. 비유닛 테스트를 파이프라인 진입 전에 걸러내는 것이 핵심.
 
 ## When to use
 
 - 사용자가 "이 프로젝트의 테스트 품질을 보고 싶다" / "mutation testing을 돌려달라"고 했을 때 **가장 먼저**.
-- `test-validity-evaluator` 오케스트레이터가 시작 시 자동 호출.
-- 명시적 호출: `python3 scripts/classify.py --root <project>`.
+- `test-validity-evaluator` 오케스트레이터가 시작 시 자동 호출 (사용자가 직접 부를 일은 거의 없음).
 
 ## How to invoke
 
 이 스킬은 한 줄의 셸 호출로 끝납니다. LLM이 절차를 시뮬레이션할 필요 없음.
 
 ```bash
-python3 skills/test-tier-classifier/scripts/classify.py \
+python3 ~/.claude/skills/test-validity-evaluator/scripts/classify.py \
     --root . \
-    --adapter contracts/adapters/python.pytest.yaml \
+    --adapter ~/.claude/skills/test-validity-evaluator/contracts/adapters/python.pytest.yaml \
     --out tier_classification.json
 ```
 
@@ -77,7 +80,9 @@ python3 skills/test-tier-classifier/scripts/classify.py \
 ## Examples
 
 ```bash
-$ python3 scripts/classify.py --root . --adapter contracts/adapters/python.pytest.yaml
+$ python3 ~/.claude/skills/test-validity-evaluator/scripts/classify.py \
+    --root . \
+    --adapter ~/.claude/skills/test-validity-evaluator/contracts/adapters/python.pytest.yaml
 ```
 
 ```jsonc
