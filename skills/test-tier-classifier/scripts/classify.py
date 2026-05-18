@@ -14,10 +14,15 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
 import sys
+from collections import defaultdict
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Optional
+
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 # ---- minimal YAML loader (adapter manifests use simple subset) -------------
@@ -82,19 +87,30 @@ class Classification:
     decision: str = "needs_review"
 
 
-_PATH_UNIT = re.compile(r"(^|/)tests?/unit/|/__tests__/|\.unit\.|/test_\w+\.py$|/\w+_test\.py$|(^|/)tests?/test_")
-_PATH_NON_UNIT = re.compile(r"(^|/)tests/(integration|e2e|smoke)/|/cypress/|/playwright/")
-_ANNOT_TIER = re.compile(r"#\s*@validity:tier\s*=\s*(unit|integration|e2e)")
-_ANNOT_SKIP = re.compile(r"#\s*@validity:skip\b")
-_FRAMEWORK_MARKER = re.compile(r"@pytest\.mark\.(integration|e2e|slow)")
-_TEST_DEF = re.compile(r"^def\s+(test_\w+)\s*\(")
+_PATH_UNIT = re.compile(
+    r"(^|/)tests?/unit/|/__tests__/|\.unit\.|/test_\w+\.py$|/\w+_test\.py$|"
+    r"(^|/)tests?/test_|(^|/)src/test/[^/]+/.+Test\.(kt|java)$"
+)
+_PATH_NON_UNIT = re.compile(
+    r"(^|/)tests/(integration|e2e|smoke)/|/cypress/|/playwright/|"
+    r"IntegrationTest\.(kt|java)$|E2ETest\.(kt|java)$"
+)
+# Tier/skip annotations are comment-based and work for // and # style comments.
+_ANNOT_TIER = re.compile(r"(?://|#)\s*@validity:tier\s*=\s*(unit|integration|e2e)")
+_ANNOT_SKIP = re.compile(r"(?://|#)\s*@validity:skip\b")
+_FRAMEWORK_MARKER_DEFAULT = re.compile(r"@pytest\.mark\.(integration|e2e|slow)")
 
 
 def _import_signals(content: str, adapter_dict: dict) -> list[Signal]:
     """Detect db/network/driver/mock imports — adapter supplies the names."""
     out: list[Signal] = []
     for i, line in enumerate(content.splitlines(), start=1):
-        if not (line.startswith("import ") or line.startswith("from ")):
+        stripped = line.lstrip()
+        if not (
+            stripped.startswith("import ")
+            or stripped.startswith("from ")
+            or stripped.startswith("import\t")
+        ):
             continue
         for kind in ("db_imports", "network_imports", "driver_imports", "mock_libs"):
             for needle in adapter_dict.get(kind, []) or []:
@@ -155,10 +171,14 @@ def _decide_routing(tier: str, confidence: float, has_skip: bool) -> str:
     return "excluded"  # unknown
 
 
-def classify_file(test_file: Path, adapter_dict: dict) -> list[Classification]:
-    content = test_file.read_text()
+def _classify_test_in_file(
+    test_file: Path,
+    test_id: str,
+    content: str,
+    heur: dict,
+    framework_marker_re: re.Pattern,
+) -> Classification:
     rel = str(test_file)
-    out: list[Classification] = []
 
     path_signals: list[Signal] = []
     if _PATH_UNIT.search(rel):
@@ -166,44 +186,80 @@ def classify_file(test_file: Path, adapter_dict: dict) -> list[Classification]:
     if _PATH_NON_UNIT.search(rel):
         path_signals.append(Signal("path_non_unit", "high", rel))
 
-    imp_signals = _import_signals(content, adapter_dict)
+    imp_signals = _import_signals(content, heur)
 
     file_annotations: list[Signal] = []
     has_skip_file = bool(_ANNOT_SKIP.search(content))
     for i, line in enumerate(content.splitlines(), start=1):
         if _ANNOT_TIER.search(line):
             file_annotations.append(Signal("annotation", "overrides", f"L{i}  {line.strip()}"))
-        if _FRAMEWORK_MARKER.search(line):
+        if framework_marker_re.search(line):
             file_annotations.append(Signal("framework_marker", "categorical", f"L{i}  {line.strip()}"))
 
-    for i, line in enumerate(content.splitlines(), start=1):
-        m = _TEST_DEF.match(line)
-        if not m:
-            continue
-        test_id = f"{rel}::{m.group(1)}"
-        signals = path_signals + imp_signals + file_annotations
-        tier, confidence = _decide_tier(signals)
-        decision = _decide_routing(tier, confidence, has_skip_file)
-        out.append(Classification(
-            test_file=rel, test_id=test_id,
-            tier=tier, confidence=round(confidence, 2),
-            signals=signals, decision=decision,
-        ))
-    return out
+    signals = path_signals + imp_signals + file_annotations
+    tier, confidence = _decide_tier(signals)
+    decision = _decide_routing(tier, confidence, has_skip_file)
+    return Classification(
+        test_file=rel, test_id=test_id,
+        tier=tier, confidence=round(confidence, 2),
+        signals=signals, decision=decision,
+    )
+
+
+def _discover_test_ids(root: Path, adapter: dict) -> list[str]:
+    """Delegate to the adapter's test_discoverer; expects test_id strings on stdout."""
+    discoverer_rel = adapter.get("implementations", {}).get("test_discoverer")
+    if not discoverer_rel:
+        return []
+    discoverer = (REPO_ROOT / discoverer_rel).resolve()
+    if not discoverer.is_file():
+        print(f"[classify] adapter test_discoverer not found: {discoverer}", file=sys.stderr)
+        return []
+    proc = subprocess.run(
+        [sys.executable, str(discoverer), "--root", str(root)],
+        capture_output=True, text=True, timeout=120, check=False,
+    )
+    if proc.returncode != 0:
+        print(f"[classify] discoverer exit {proc.returncode}: {proc.stderr[:240]}", file=sys.stderr)
+        return []
+    try:
+        ids = json.loads(proc.stdout)
+    except json.JSONDecodeError as e:
+        print(f"[classify] discoverer produced non-JSON output: {e}", file=sys.stderr)
+        return []
+    return [t for t in ids if isinstance(t, str) and "::" in t]
 
 
 def classify_project(root: Path, adapter_path: Path) -> list[Classification]:
     adapter = _load_yaml(adapter_path)
     heur = adapter.get("tier_heuristic_dictionary", {})
+    framework_marker_pattern = adapter.get("framework_marker_pattern")
+    framework_marker_re = re.compile(framework_marker_pattern) if framework_marker_pattern else _FRAMEWORK_MARKER_DEFAULT
+
+    test_ids = _discover_test_ids(root, adapter)
+
+    # Group test_ids by file so each file is read once.
+    grouped: dict[str, list[str]] = defaultdict(list)
+    for tid in test_ids:
+        file_part = tid.split("::", 1)[0]
+        grouped[file_part].append(tid)
+
     results: list[Classification] = []
-    for p in sorted(root.rglob("test_*.py")):
-        # skip self
-        if "skills/test-tier-classifier" in str(p):
+    for file_part, tids in sorted(grouped.items()):
+        # discoverer paths may be repo-relative; resolve against root.
+        file_path = Path(file_part)
+        if not file_path.is_absolute():
+            file_path = (root / file_part).resolve()
+        if not file_path.is_file():
+            print(f"[classify] test file not found: {file_path}", file=sys.stderr)
             continue
         try:
-            results.extend(classify_file(p, heur))
-        except Exception as e:
-            print(f"[classify] error on {p}: {e}", file=sys.stderr)
+            content = file_path.read_text(errors="replace")
+        except OSError as e:
+            print(f"[classify] error reading {file_path}: {e}", file=sys.stderr)
+            continue
+        for tid in tids:
+            results.append(_classify_test_in_file(file_path, tid, content, heur, framework_marker_re))
     return results
 
 

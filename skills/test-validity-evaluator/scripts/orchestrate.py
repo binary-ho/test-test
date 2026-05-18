@@ -39,6 +39,18 @@ def _run(cmd: list[str], **kw) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True, **kw)
 
 
+def _load_adapter(adapter_path: Path) -> dict:
+    """Load an adapter manifest; reuse the tier-classifier's minimal YAML parser."""
+    try:
+        import yaml  # type: ignore
+        return yaml.safe_load(adapter_path.read_text())
+    except ImportError:
+        cls_path = REPO_ROOT / "skills" / "test-tier-classifier" / "scripts"
+        sys.path.insert(0, str(cls_path))
+        from classify import _parse_minimal_yaml  # type: ignore
+        return _parse_minimal_yaml(adapter_path.read_text())
+
+
 def _session_root(out_root: Path, session_id: str) -> Path:
     return out_root / session_id
 
@@ -188,7 +200,15 @@ def run_iteration(args, iter_dir: Path) -> dict:
 
     # [1b] subject location (deterministic only here; LLM boost would happen externally)
     subject_map: list[dict] = []
-    resolve_py = REPO_ROOT / "contracts" / "adapters" / "python_pytest" / "resolve.py"
+    adapter_manifest = _load_adapter(Path(args.adapter))
+    resolver_rel = adapter_manifest.get("implementations", {}).get("subject_resolver")
+    if not resolver_rel:
+        raise RuntimeError(
+            f"Adapter {args.adapter} has no implementations.subject_resolver — cannot resolve subjects."
+        )
+    resolve_py = (REPO_ROOT / resolver_rel).resolve()
+    if not resolve_py.is_file():
+        raise FileNotFoundError(f"subject_resolver not found at {resolve_py}")
     for t in included:
         proc = _run([sys.executable, str(resolve_py),
                      "--test-file", t["test_file"], "--test-id", t["test_id"]])

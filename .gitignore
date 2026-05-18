@@ -1,0 +1,7 @@
+# Scratch clones used to exercise the skills against real projects.
+use-ugc-service/
+
+# Skill run outputs.
+out/
+__pycache__/
+*.pyc
