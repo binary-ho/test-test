@@ -26,13 +26,33 @@ cd chennai
 2. PyYAML 자동 설치 (없을 때만)
 3. tiny Python fixture로 smoke 분류 실행 (✓ 출력으로 검증)
 
-업데이트는 `cd chennai && git pull` 만 — symlink라 재설치 불필요.
-
 설치 확인:
 ```bash
 ls -la ~/.claude/skills/test-validity-evaluator/SKILL.md
 # → SKILL.md가 보이면 Claude Code가 다음 세션부터 자동 디스커버
 ```
+
+## Updating
+
+위의 install 명령어는 **clone 시점의 main을 한 번 가져올 뿐** 입니다. 자동 동기화는 없습니다. 다시 같은 블록을 통째로 돌리면 `git clone` 이 "destination 'chennai' already exists" 로 fail 합니다.
+
+최신화 방법은 셋 중 하나:
+
+```bash
+# A. 평소 — 가장 가벼움. symlink는 그대로니까 install.sh 재실행 불필요.
+cd chennai && git pull
+
+# B. 강제 클린 재설치 — chennai/ 손상됐을 때만.
+rm -rf chennai
+git clone https://github.com/binary-ho/test-test.git chennai
+cd chennai && ./install.sh
+
+# C. 주기적 자동 sync — cron / launchd 직접 설정.
+#    예) crontab -e
+#    0 * * * * cd ~/chennai && git pull -q
+```
+
+`./install.sh` 는 idempotent (이미 같은 symlink가 있으면 `✓ symlink already points at ...` 만 출력) 이라 다시 실행해도 안전합니다. 단 코드 업데이트 효과는 없습니다 — symlink만 다시 만들 뿐.
 
 ## Use from any repo
 
