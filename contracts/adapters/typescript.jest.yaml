@@ -1,0 +1,60 @@
+key: typescript.jest
+language: typescript
+framework: jest
+version: 0.1.0
+maintainer: binary-ho
+
+capabilities:
+  supports_async:              true
+  supports_property_based:     false    # via fast-check (not auto-detected)
+  supports_parameterized:      true     # via test.each / describe.each
+  supports_parallel_execution: false    # jest --runInBand by default for stability
+  syntactic_operators:
+    - AOR
+    - ROR
+    - COR
+    - LCR
+    - BoundaryShift
+    - ConstantReplace
+
+# Tags / decorators that imply a non-unit tier.
+framework_marker_pattern: "\\b(integration|e2e|slow)\\b|@playwright|cypress\\.io"
+
+implementations:
+  test_discoverer:    contracts/adapters/typescript_jest/discover.py
+  subject_resolver:   contracts/adapters/typescript_jest/resolve.py
+  syntactic_operator: contracts/adapters/typescript_jest/mutate.py
+  injector:           contracts/adapters/typescript_jest/inject.py
+  runner:             contracts/adapters/typescript_jest/run.py
+
+tier_heuristic_dictionary:
+  db_imports:
+    - pg
+    - mysql2
+    - mongodb
+    - mongoose
+    - typeorm
+    - prisma
+    - redis
+    - ioredis
+    - knex
+  network_imports:
+    - axios
+    - node-fetch
+    - got
+    - superagent
+    - undici
+    - cross-fetch
+  driver_imports:
+    - playwright
+    - "@playwright/test"
+    - puppeteer
+    - selenium-webdriver
+    - cypress
+  mock_libs:
+    - jest.mock
+    - sinon
+    - nock
+    - msw
+    - "@mswjs/data"
+    - testdouble

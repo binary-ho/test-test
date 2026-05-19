@@ -1,14 +1,7 @@
-"""File-line mutation injector for Kotlin sources.
+"""File-line mutation injector for TypeScript sources.
 
-Language-agnostic file replacement with `.testvalidity-backup` rollback.
-Functionally identical to `python_pytest/inject.py` — the line-replace
-operation does not care what language the file is in.
-
-CLI:
-
-    python inject.py --mutant mutant.json --check
-    python inject.py --mutant mutant.json --apply
-    python inject.py --mutant mutant.json --rollback
+Language-agnostic line replacement + `.testvalidity-backup` rollback —
+identical in shape to the Kotlin and Python injectors.
 """
 from __future__ import annotations
 
@@ -82,10 +75,10 @@ def file_hash(path: Path) -> str:
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Kotlin mutation injector with safe rollback.")
-    ap.add_argument("--mutant", required=True, help="path to mutant JSON")
+    ap = argparse.ArgumentParser(description="TypeScript mutation injector with safe rollback.")
+    ap.add_argument("--mutant", required=True)
     g = ap.add_mutually_exclusive_group(required=True)
-    g.add_argument("--check", action="store_true", help="dry run: show diff only")
+    g.add_argument("--check", action="store_true")
     g.add_argument("--apply", action="store_true")
     g.add_argument("--rollback", action="store_true")
     args = ap.parse_args()

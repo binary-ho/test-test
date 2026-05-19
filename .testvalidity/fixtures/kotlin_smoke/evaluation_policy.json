@@ -1,0 +1,18 @@
+{
+  "session": {
+    "session_id": "evs_kotlin_smoke",
+    "max_iterations": 1,
+    "target_mutation_score": 0.85,
+    "budget": { "max_tokens": 600000, "max_seconds": 600 },
+    "cache_enabled": true,
+    "equivalent_mutants_yml": ".testvalidity/equivalent_mutants.yml",
+    "suppressions_yml":       ".testvalidity/suppressions.yml"
+  },
+  "operators": {
+    "syntactic_enabled": ["AOR", "ROR", "COR", "LCR", "BoundaryShift", "ConstantReplace"],
+    "semantic_enabled": true
+  },
+  "budget": { "max_mutants": 50 },
+  "mutation": {},
+  "adversarial": {}
+}

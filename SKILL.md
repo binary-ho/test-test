@@ -26,6 +26,7 @@ description: Use whenever the user asks to evaluate test quality, run mutation t
 # 어댑터는 패키지 안에 동봉됨. 현재 프로젝트의 언어/프레임워크에 맞춰 선택.
 ADAPTER=~/.claude/skills/test-validity-evaluator/contracts/adapters/python.pytest.yaml
 # Kotlin 프로젝트라면: contracts/adapters/kotlin.junit.yaml
+# TypeScript+Jest 프로젝트라면: contracts/adapters/typescript.jest.yaml
 
 # 정책 파일은 타겟 레포의 루트에 두는 게 표준 (또는 skill 안에서 디폴트 사용)
 POLICY=./evaluation_policy.json
@@ -36,6 +37,23 @@ python3 ~/.claude/skills/test-validity-evaluator/scripts/orchestrate.py \
     --policy "$POLICY" \
     --session-id "evs_$(date +%Y%m%d_%H%M%S)"
 ```
+
+### LLM pause·resume 루프 (자율 실행)
+
+orchestrate.py 는 LLM 작업이 필요한 4 지점에서 **일시정지** 합니다. 매번 stdout 의 마지막 줄에 `__PAUSE__ <phase_id>` 를 출력하고, `<iter_dir>/_pending_llm.json` 에 prompt·context·output 경로를 남긴 뒤 종료합니다 (exit 0). Claude Code 세션은 다음 루프를 수행:
+
+```
+while True:
+    1. Bash: orchestrate.py  (최초 호출이면 --root/--adapter/...; 이후 호출이면 --resume <iter_dir>)
+    2. stdout 마지막 줄에 `__PAUSE__` 가 없으면 → 완료. validity_report.json/report.html 확인.
+    3. `__PAUSE__` 가 있으면:
+       a. `<iter_dir>/_pending_llm.json` 읽기 → {prompt, context, output, schema_hint, next_step}.
+       b. prompt 파일 + context JSON 을 읽고, LLM 작업 수행 (Claude Code 본인 컨텍스트로).
+       c. 결과 JSON 을 output 경로에 작성. 빈 결과면 `[]` 유효.
+    4. 같은 iter_dir 로 다음 루프 (`orchestrate.py --resume <iter_dir>`).
+```
+
+총 4번의 pause: `mutation.semantic_operator` → `mutation.survivor_diagnose` → `adversarial.critique` (4개 critique prompt 합본) → `adversarial.generate_cases` (5개 adversarial prompt 합본). 마지막 resume 후 aggregation·HTML 이 자동 수행됩니다.
 
 `evaluation_policy.json`이 타겟 레포에 없으면 다음을 생성:
 
@@ -80,8 +98,9 @@ orchestrate.py는 다음을 순서대로 수행:
 
 패키지에 동봉:
 
-- `contracts/adapters/python.pytest.yaml` — Python + pytest (완성)
-- `contracts/adapters/kotlin.junit.yaml` — Kotlin + JUnit 5 (분류·subject location 완성, mutation은 stub)
+- `contracts/adapters/python.pytest.yaml` — Python + pytest (완성, AST 기반 mutator)
+- `contracts/adapters/kotlin.junit.yaml` — Kotlin + JUnit 5 (완성, regex mutator + Gradle runner)
+- `contracts/adapters/typescript.jest.yaml` — TypeScript + Jest (완성, regex mutator + npx/jest runner)
 
 새 어댑터 추가는 `contracts/LanguageAdapter.schema.json` 참조.
 

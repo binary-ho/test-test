@@ -66,6 +66,31 @@ python3 ~/.claude/skills/test-validity-evaluator/scripts/orchestrate.py \
     --session-id "evs_$(date +%Y%m%d_%H%M%S)"
 ```
 
+`./gradlew` (또는 system `gradle`)가 필요합니다.
+
+### 수동 호출 (TypeScript+Jest 프로젝트)
+
+```bash
+cd <your-typescript-repo>
+python3 ~/.claude/skills/test-validity-evaluator/scripts/orchestrate.py \
+    --root . \
+    --adapter ~/.claude/skills/test-validity-evaluator/contracts/adapters/typescript.jest.yaml \
+    --policy ./evaluation_policy.json \
+    --session-id "evs_$(date +%Y%m%d_%H%M%S)"
+```
+
+`npx jest`가 동작해야 합니다 (pnpm/yarn lockfile 감지 시 자동으로 `pnpm exec jest`/`yarn jest` 사용).
+
+### LLM 단계 (pause·resume)
+
+orchestrate.py 는 LLM 작업이 필요한 4 지점(`mutation.semantic_operator`, `mutation.survivor_diagnose`, `adversarial.critique`, `adversarial.generate_cases`)에서 `__PAUSE__` 시그널과 함께 종료합니다. `<iter_dir>/_pending_llm.json` 에 prompt·context·output 경로가 적혀 있으니, LLM 작업 후 output JSON 을 쓰고:
+
+```bash
+python3 ~/.claude/skills/test-validity-evaluator/scripts/orchestrate.py --resume <iter_dir>
+```
+
+로 재호출하면 다음 단계가 진행됩니다. 4번의 resume 후 자동 aggregation·HTML 렌더로 종료. Claude Code 세션 안이면 자연 발화 → 자동 루프.
+
 ### `evaluation_policy.json` 생성 (없으면 한 번)
 
 타겟 레포 루트에 다음 파일을 만듭니다:
@@ -114,9 +139,12 @@ python3 ~/.claude/skills/test-validity-evaluator/scripts/orchestrate.py \
 | 증상 | 원인 | 해결 |
 |---|---|---|
 | Claude Code 발화해도 skill이 트리거 안 됨 | 디스커버리 누락 | `ls ~/.claude/skills/test-validity-evaluator/SKILL.md`로 symlink 확인. Claude Code 세션 재시작 |
-| `No unit tests passed tier classification` 경고만 출력 | 어댑터 미스매치 — Python 어댑터로 Kotlin 레포 분석 등 | `--adapter` 인자를 프로젝트 언어에 맞게 (`python.pytest.yaml` 또는 `kotlin.junit.yaml`) |
+| `No unit tests passed tier classification` 경고만 출력 | 어댑터 미스매치 — Python 어댑터로 Kotlin 레포 분석 등 | `--adapter` 인자를 프로젝트 언어에 맞게 (`python.pytest.yaml`, `kotlin.junit.yaml`, `typescript.jest.yaml`) |
 | `ModuleNotFoundError: No module named 'yaml'` | PyYAML 미설치 + minimal parser 경로 문제 | `pip3 install --user pyyaml` 또는 `./install.sh` 재실행 |
-| Kotlin: subject_map.confidence 평균이 0.25 정도로 낮음 | resolver heuristic 한계 (동일 패키지 클래스 / `ClassName.staticMethod()` 호출 미감지) | 알려진 제한사항. mutation 결과에는 영향 있으나 분류/실행은 정상 |
+| `__PAUSE__` 출력 후 멈춤 | 정상 — LLM 작업 대기 중 | `<iter_dir>/_pending_llm.json` 읽고 output 채운 뒤 `orchestrate.py --resume <iter_dir>` |
+| Kotlin: `[run] no ./gradlew nor system gradle found` | Gradle 미설치 | 타겟 레포에 `./gradlew` 추가하거나 `gradle` 시스템 설치 |
+| TS: `npx`/`jest` 못 찾음 | Node toolchain 부재 | Node + jest 설치, 또는 lockfile (pnpm-lock.yaml/yarn.lock) 일치하는 매니저 설치 |
+| 리졸버: subject_map.confidence 평균이 낮음 | resolver heuristic 한계 (`ClassName.staticMethod()` 호출 패턴 등 미감지) | 알려진 제한사항. mutation 결과에는 영향 있으나 분류/실행은 정상 |
 | `~/.claude/skills/...` 가 못 찾아진다 | symlink가 다른 경로로 이전 또는 chennai 디렉터리 삭제 | `cd chennai && ./install.sh` 재실행. `readlink ~/.claude/skills/test-validity-evaluator` 로 link target 확인 |
 | 다른 cwd에서 `out/` 위치 헷갈림 | `out/`은 invoke 시점 cwd 기준 생성 | 항상 타겟 레포 루트에서 호출. `out/`은 거기 생김 |
 
@@ -147,7 +175,9 @@ chennai/                       (= ~/.claude/skills/test-validity-evaluator/)
 │   ├── types.md               # types source-of-truth
 │   └── adapters/
 │       ├── python.pytest.yaml + python_pytest/{discover,resolve,mutate,inject,run}.py
-│       └── kotlin.junit.yaml  + kotlin_junit/{discover,resolve,mutate,inject,run}.py
+│       ├── kotlin.junit.yaml  + kotlin_junit/{discover,resolve,mutate,inject,run}.py
+│       ├── typescript.jest.yaml + typescript_jest/{discover,resolve,mutate,inject,run}.py
+│       └── _operator_tables.py   # shared Mutant + AOR/ROR tables + regex emitters
 ├── docs/
 │   ├── ADR-1-*.md, ADR-2-*.md, IMPLEMENTATION-REPORT.md
 │   └── spec/                  # 4개 sub-skill 설계 사양 (디스커버리에서 제외용으로 .md rename)
@@ -158,8 +188,9 @@ chennai/                       (= ~/.claude/skills/test-validity-evaluator/)
 
 ## Supported adapters
 
-- **Python + pytest** — 완성 (discover, resolve, mutate, inject, run)
-- **Kotlin + JUnit 5** — discover, resolve, tier classification 완성. mutation은 Gradle 호출 미구현 (안전한 stub — 0 mutants 반환)
+- **Python + pytest** — 완성 (discover, resolve, mutate via AST, inject, run)
+- **Kotlin + JUnit 5** — 완성. regex 기반 6 operators, `./gradlew test --tests` 호출, JUnit XML 파싱
+- **TypeScript + Jest** — 완성. regex 기반 6 operators, `npx jest --json` (pnpm/yarn lockfile 자동 감지), Jest JSON 출력 파싱
 
 새 어댑터 추가:
 1. `contracts/LanguageAdapter.schema.json` 참조해 manifest yaml 작성
@@ -179,7 +210,9 @@ chennai/                       (= ~/.claude/skills/test-validity-evaluator/)
 
 ## Known limitations (follow-up)
 
-- Kotlin mutation은 stub. Gradle 호출 + Kotlin AST parser 구현 필요.
-- Resolver heuristic이 동일 패키지 클래스 + `ClassName.staticMethod()` 호출 패턴 미감지 (Kotlin에서 ~15% mapping rate).
+- Kotlin/TS mutation은 regex 기반이라 토큰 경계가 애매한 케이스(예: 문자열 인터폴레이션 안의 표현식)에서 false positive 가능. equivalence-judge 프롬프트가 2차 가드.
+- Resolver heuristic이 `ClassName.staticMethod()` 호출 패턴은 여전히 미감지 (Kotlin/TS 공통). Same-package 클래스는 v0.1 부터 지원.
+- TS adapter v1 은 Jest 만 지원. Vitest 는 동일 패턴으로 별도 manifest+5 파일 추가하면 됨.
 - `validity_report.json`의 ledger ref가 cwd-relative — 보고서를 다른 cwd로 옮기면 ref 깨짐 (planned: iter 디렉터리 상대로 변경).
+- PiTest 통합은 `capabilities.uses_pitest` 매니페스트 플래그로 옵트인 추가 가능 (현재 미구현).
 - sub-orchestrator subprocess 실패가 silent — graceful이지만 진단 어려움 (planned: returncode 검사).
