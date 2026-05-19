@@ -1,18 +1,14 @@
-"""Kotlin syntactic mutation operators.
+"""TypeScript syntactic mutation operators.
 
-Builds a character mask of `.kt` source (strings + comments) and delegates
-to the shared regex emitters in `_operator_tables.py`. Kotlin-specific
-pieces handled here:
+Mask builder handles TS-specific lexical elements:
 
-  * Triple-quoted raw strings (multi-line).
-  * `${...}` interpolation is fully masked (safer than partial unmasking).
-  * COR uses `&&` / `||` spelling.
+  * `'...'`, `"..."`, `` `...` `` (template literals are masked as a whole;
+    `${...}` interpolations are not unmasked — v1 safety trade-off).
+  * `//` line and `/* */` block comments (including `/** */`).
+  * `===` / `!==` are not mutated (the ROR emitter's negative-lookahead
+    handles this).
 
-CLI mirrors `python_pytest/mutate.py`:
-
-    python mutate.py --file Foo.kt --span 12 48 \
-                     --operators AOR ROR BoundaryShift \
-                     --out mutants.json
+All operator emission delegated to `_operator_tables.py`.
 """
 from __future__ import annotations
 
@@ -31,25 +27,25 @@ from _operator_tables import (  # noqa: E402
 )
 
 
-_KOTLIN_COR = {"&&": "||", "||": "&&"}
+_TS_COR = {"&&": "||", "||": "&&"}
 
 
 def _build_masks(src: str) -> Tuple[List[bool], List[Tuple[int, int]]]:
-    """Return (skip_mask, single_string_regions).
+    """Return (skip_mask, single-line-string-regions).
 
-    Triple-quoted strings are masked but excluded from string_regions
-    (multi-line replacement is risky).
+    Template literals (``...``) span multiple lines and are masked but not
+    returned as string regions.
     """
     n = len(src)
     mask = [False] * n
     strings: List[Tuple[int, int]] = []
     i = 0
     state = "code"
+    quote = ""
     str_open = -1
     while i < n:
         c = src[i]
         nxt2 = src[i:i + 2]
-        nxt3 = src[i:i + 3]
         if state == "code":
             if nxt2 == "//":
                 mask[i] = mask[i + 1] = True
@@ -61,14 +57,15 @@ def _build_masks(src: str) -> Tuple[List[bool], List[Tuple[int, int]]]:
                 state = "block_comment"
                 i += 2
                 continue
-            if nxt3 == '"""':
-                mask[i] = mask[i + 1] = mask[i + 2] = True
-                state = "triple_string"
-                i += 3
+            if c == "`":
+                mask[i] = True
+                state = "template"
+                i += 1
                 continue
-            if c == '"':
+            if c in "'\"":
                 mask[i] = True
                 state = "string"
+                quote = c
                 str_open = i
                 i += 1
                 continue
@@ -95,26 +92,31 @@ def _build_masks(src: str) -> Tuple[List[bool], List[Tuple[int, int]]]:
                 mask[i + 1] = True
                 i += 2
                 continue
-            if c == '"':
+            if c == quote:
                 strings.append((str_open, i))
                 state = "code"
+                quote = ""
                 str_open = -1
                 i += 1
                 continue
             if c == "\n":
                 state = "code"
+                quote = ""
                 str_open = -1
                 i += 1
                 continue
             i += 1
             continue
-        if state == "triple_string":
-            if nxt3 == '"""':
-                mask[i] = mask[i + 1] = mask[i + 2] = True
-                state = "code"
-                i += 3
-                continue
+        if state == "template":
             mask[i] = True
+            if c == "\\" and i + 1 < n:
+                mask[i + 1] = True
+                i += 2
+                continue
+            if c == "`":
+                state = "code"
+                i += 1
+                continue
             i += 1
             continue
     return mask, strings
@@ -137,7 +139,7 @@ def generate_mutants(file: str, span: Optional[List[int]] = None,
         elif op_name == "ROR":
             it = emit_ror(src, mask, starts, file, span)
         elif op_name == "COR":
-            it = emit_cor(src, mask, starts, _KOTLIN_COR, file, span)
+            it = emit_cor(src, mask, starts, _TS_COR, file, span)
         elif op_name == "LCR":
             it = emit_lcr_paren_bang(src, mask, starts, file, span)
         elif op_name == "BoundaryShift":
@@ -155,7 +157,7 @@ def generate_mutants(file: str, span: Optional[List[int]] = None,
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Regex-based Kotlin mutator.")
+    ap = argparse.ArgumentParser(description="Regex-based TypeScript mutator.")
     ap.add_argument("--file", required=True)
     ap.add_argument("--span", nargs=2, type=int, default=None)
     ap.add_argument("--operators", nargs="+", default=None,

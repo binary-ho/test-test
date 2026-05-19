@@ -21,6 +21,7 @@ from typing import Optional
 
 
 _IMPORT_RE = re.compile(r"^\s*import\s+([\w.]+)(?:\s+as\s+(\w+))?")
+_PACKAGE_RE = re.compile(r"^\s*package\s+([\w.]+)")
 _CLASS_DECL_RE = re.compile(r"^\s*(?:open\s+|abstract\s+|internal\s+|data\s+|sealed\s+)?class\s+(\w+)")
 _FUN_DECL_RE = re.compile(r"^\s*(?:@\w[\w.()\"\s,=]*\s+)*fun\s+`?([\w\s]+?)`?\s*\(")
 _MOCKK_RE = re.compile(r"mockk\s*<\s*(\w+)\s*>|@MockK\s+\w+\s*:\s*(\w+)|Mockito\.mock\(\s*(\w+)::class")
@@ -118,12 +119,17 @@ def resolve(test_file: str, test_id: str) -> dict:
     lines = content.splitlines()
 
     imports: dict[str, str] = {}
+    test_package = ""
     for line in lines:
         m = _IMPORT_RE.match(line)
         if m:
             fqn = m.group(1)
             alias = m.group(2) or fqn.split(".")[-1]
             imports[alias] = fqn
+            continue
+        pm = _PACKAGE_RE.match(line)
+        if pm:
+            test_package = pm.group(1)
 
     qualified = test_id.split("::", 1)[1] if "::" in test_id else test_id
     if "." in qualified:
@@ -140,10 +146,15 @@ def resolve(test_file: str, test_id: str) -> dict:
         name = m.group(1)
         if name in seen:
             continue
-        if name not in imports:
-            continue
         seen.add(name)
-        fqn = imports[name]
+        if name in imports:
+            fqn = imports[name]
+        elif test_package:
+            # Same-package fallback: tests in `package X.Y.Z` can reference
+            # `Foo()` without an import. Try `src/main/kotlin/X/Y/Z/Foo.kt`.
+            fqn = f"{test_package}.{name}"
+        else:
+            continue
         source_file = _find_source_file(test_path, fqn)
         if source_file:
             span = _find_symbol_span(source_file, name)

@@ -93,7 +93,8 @@ class Classification:
 
 _PATH_UNIT = re.compile(
     r"(^|/)tests?/unit/|/__tests__/|\.unit\.|/test_\w+\.py$|/\w+_test\.py$|"
-    r"(^|/)tests?/test_|(^|/)src/test/[^/]+/.+Test\.(kt|java)$"
+    r"(^|/)tests?/test_|(^|/)src/test/[^/]+/.+Test\.(kt|java)$|"
+    r"\.test\.tsx?$|\.spec\.tsx?$|\.test\.jsx?$|\.spec\.jsx?$"
 )
 _PATH_NON_UNIT = re.compile(
     r"(^|/)tests/(integration|e2e|smoke)/|/cypress/|/playwright/|"

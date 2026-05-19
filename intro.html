@@ -1,0 +1,971 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>test-validity-evaluator — Chennai</title>
+<style>
+  :where(html, body, *){
+    font-family: "Apple SD Gothic Neo", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif !important;
+    font-style: normal !important;
+  }
+  :root{
+    --bg-0: oklch(0.13 0.025 190);
+    --bg-1: oklch(0.18 0.04 185);
+    --bg-2: oklch(0.24 0.06 180);
+    --bg-3: oklch(0.32 0.08 175);
+    --mint:  oklch(0.86 0.14 170);
+    --mint-2: oklch(0.78 0.16 170);
+    --cyan: oklch(0.74 0.13 200);
+    --leaf: oklch(0.55 0.13 165);
+    --ink:  oklch(0.97 0.02 175);
+    --ink-2: oklch(0.78 0.03 180);
+    --ink-3: oklch(0.55 0.04 180);
+    --line: oklch(1 0 0 / 0.08);
+    --line-2: oklch(1 0 0 / 0.16);
+    --glass: oklch(0.22 0.04 180 / 0.55);
+    --glass-2: oklch(0.18 0.04 180 / 0.7);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background: var(--bg-0);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    overflow-x:hidden;
+    min-height:100vh;
+  }
+  .serif{ font-weight:500; letter-spacing:-0.01em; }
+  .mono{ font-weight:400; }
+
+  /* ============ Background scene ============ */
+  .scene{
+    position: fixed; inset:0; z-index:0; overflow:hidden;
+    background:
+      radial-gradient(120% 80% at 50% 110%, oklch(0.32 0.08 170) 0%, transparent 55%),
+      radial-gradient(80% 60% at 80% 20%, oklch(0.28 0.07 200) 0%, transparent 60%),
+      radial-gradient(70% 50% at 15% 10%, oklch(0.22 0.06 175) 0%, transparent 65%),
+      linear-gradient(180deg, var(--bg-0) 0%, var(--bg-1) 60%, var(--bg-0) 100%);
+  }
+  .grain{
+    position:absolute; inset:-2px; pointer-events:none; opacity:0.08; mix-blend-mode:overlay;
+    background-image:
+      repeating-radial-gradient(circle at 25% 25%, transparent 0, oklch(1 0 0) 1px, transparent 2px),
+      repeating-radial-gradient(circle at 75% 75%, transparent 0, oklch(1 0 0) 1px, transparent 2px);
+    background-size: 3px 3px, 5px 5px;
+  }
+  .beam{
+    position:absolute; left:50%; top:-20%;
+    width: 60vmax; height: 140vmax;
+    background: conic-gradient(from 200deg at 50% 0%, transparent 0deg, oklch(0.9 0.15 175 / 0.10) 8deg, transparent 16deg, transparent 200deg, oklch(0.9 0.15 195 / 0.07) 220deg, transparent 240deg);
+    filter: blur(40px);
+    transform-origin: top center;
+    animation: beam 22s ease-in-out infinite alternate;
+    pointer-events:none;
+  }
+  @keyframes beam{
+    0% { transform: translateX(-50%) rotate(-8deg); opacity:.65 }
+    100%{ transform: translateX(-50%) rotate(8deg); opacity:1 }
+  }
+  .mouse-light{
+    position:fixed; width: 720px; height:720px; pointer-events:none; z-index:1;
+    background: radial-gradient(circle, oklch(0.85 0.12 175 / 0.18) 0%, transparent 60%);
+    transform: translate(-50%,-50%);
+    mix-blend-mode: screen;
+    filter: blur(20px);
+    transition: opacity .5s;
+  }
+  .forest{
+    position:absolute; left:0; right:0; bottom:0; height:100%;
+    pointer-events:none;
+  }
+  .forest svg{ position:absolute; left:50%; transform:translateX(-50%); width: 120%; max-width:none; }
+  .layer-1{ bottom:0; opacity:.7; }
+  .layer-2{ bottom:0; opacity:.85; }
+  .layer-3{ bottom:0; opacity:1; }
+
+  /* Floating spores */
+  .spores{ position:absolute; inset:0; pointer-events:none; }
+  .spore{
+    position:absolute; bottom:-20px;
+    width:6px; height:6px; border-radius:50%;
+    background: radial-gradient(circle at 30% 30%, oklch(0.95 0.12 175), oklch(0.75 0.15 170 / 0.5) 70%, transparent);
+    filter: blur(0.5px);
+    animation: rise linear infinite;
+    will-change: transform, opacity;
+  }
+  @keyframes rise{
+    0% { transform: translate(0, 0) scale(.6); opacity:0 }
+    8% { opacity: 1 }
+    50%{ transform: translate(var(--dx,30px), -50vh) scale(1); opacity:.9 }
+    90%{ opacity:.6 }
+    100%{ transform: translate(calc(var(--dx,30px) * 2), -110vh) scale(.4); opacity:0 }
+  }
+
+  /* Aurora swirl bottom */
+  .aurora{
+    position:absolute; left:-10%; right:-10%; bottom:-30%;
+    height: 70%;
+    background:
+      radial-gradient(50% 60% at 30% 50%, oklch(0.55 0.18 170 / 0.35), transparent 60%),
+      radial-gradient(40% 50% at 70% 60%, oklch(0.6 0.18 200 / 0.30), transparent 65%);
+    filter: blur(50px);
+    animation: drift 18s ease-in-out infinite alternate;
+  }
+  @keyframes drift{
+    0%   { transform: translate3d(-2%, 0, 0) scale(1) }
+    100% { transform: translate3d(2%, -3%, 0) scale(1.05) }
+  }
+
+  /* ============ Layout ============ */
+  .wrap{ position:relative; z-index:2; }
+
+  /* Nav */
+  nav.top{
+    position:sticky; top:0; z-index:30;
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 18px 40px;
+    backdrop-filter: blur(14px) saturate(1.2);
+    -webkit-backdrop-filter: blur(14px) saturate(1.2);
+    background: oklch(0.13 0.025 190 / 0.55);
+    border-bottom: 1px solid var(--line);
+  }
+  .logo{ display:flex; align-items:center; gap:10px; }
+  .logo-mark{
+    width:28px;height:28px;border-radius:8px;
+    background: conic-gradient(from 90deg, var(--mint), var(--cyan), var(--leaf), var(--mint));
+    position:relative;
+    box-shadow: 0 0 30px oklch(0.85 0.14 175 / 0.5), inset 0 0 12px oklch(0 0 0 / .35);
+    animation: spin 14s linear infinite;
+  }
+  .logo-mark::after{
+    content:""; position:absolute; inset:6px; border-radius:4px;
+    background: var(--bg-0);
+  }
+  @keyframes spin{ to{ transform: rotate(360deg) } }
+  .logo span{ font-size:15px; letter-spacing:0.02em; color: var(--ink); }
+  .logo b{ font-weight:600; color: var(--mint); }
+  nav.top ul{ list-style:none; display:flex; gap:28px; margin:0; padding:0; font-size:13.5px; color: var(--ink-2); }
+  nav.top ul a{ color:inherit; text-decoration:none; }
+  nav.top ul a:hover{ color: var(--mint); }
+  .nav-cta{
+    font-size: 13px; padding: 8px 14px; border-radius: 999px;
+    background: oklch(0.98 0.06 175 / 0.95); color: oklch(0.18 0.04 180);
+    border:none; cursor:pointer; font-weight:600;
+    transition: transform .2s, box-shadow .2s;
+  }
+  .nav-cta:hover{ transform: translateY(-1px); box-shadow: 0 8px 30px oklch(0.85 0.14 175 / 0.35); }
+
+  /* Hero */
+  header.hero{
+    position:relative;
+    padding: 120px 40px 100px;
+    min-height: 92vh;
+    display:flex; flex-direction:column; justify-content:center;
+    max-width: 1320px; margin: 0 auto;
+  }
+  .eyebrow{
+    display:inline-flex; align-items:center; gap:10px;
+    font-size:11.5px; font-weight:500;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--mint);
+    padding: 7px 12px; border-radius:999px;
+    background: oklch(0.85 0.14 175 / 0.08);
+    border: 1px solid oklch(0.85 0.14 175 / 0.25);
+    width:max-content;
+  }
+  .eyebrow .dot{ width:6px;height:6px;border-radius:50%; background:var(--mint); box-shadow:0 0 12px var(--mint); animation: pulse 1.8s ease-in-out infinite }
+  @keyframes pulse{ 50%{ opacity:.3; transform: scale(.8) } }
+
+  h1.title{
+    font-size: clamp(48px, 7.6vw, 112px);
+    line-height: 1.05; letter-spacing: -0.03em;
+    margin: 26px 0 24px;
+    color: var(--ink);
+    font-weight: 700;
+  }
+  h1.title em{
+    background: linear-gradient(110deg, var(--mint) 0%, var(--cyan) 50%, oklch(0.92 0.15 165) 100%);
+    -webkit-background-clip: text; background-clip:text;
+    color: transparent;
+  }
+  .title-row{ display:block; overflow:hidden; }
+  .title-row > span{ display:inline-block; transform: translateY(110%); animation: rise-in 1.2s cubic-bezier(.2,.8,.2,1) forwards; }
+  .title-row:nth-child(2) > span{ animation-delay:.12s }
+  .title-row:nth-child(3) > span{ animation-delay:.24s }
+  @keyframes rise-in{ to{ transform: translateY(0) } }
+
+  p.lede{
+    font-size: clamp(16px, 1.45vw, 21px);
+    line-height: 1.55;
+    color: var(--ink-2);
+    max-width: 640px;
+    margin: 0 0 36px;
+    opacity:0; animation: fade-up 1.2s .6s cubic-bezier(.2,.8,.2,1) forwards;
+  }
+  @keyframes fade-up{ from{ opacity:0; transform: translateY(20px) } to{ opacity:1; transform: none } }
+
+  .hero-cta{ display:flex; gap:14px; opacity:0; animation: fade-up 1.2s .85s cubic-bezier(.2,.8,.2,1) forwards; }
+  .btn{
+    display:inline-flex; align-items:center; gap:10px;
+    padding: 14px 22px; border-radius: 999px;
+    font-size: 14.5px; font-weight: 500; cursor:pointer;
+    border:1px solid transparent;
+    text-decoration:none; transition: transform .2s, box-shadow .2s, background .2s;
+  }
+  .btn-primary{
+    background: linear-gradient(135deg, oklch(0.95 0.14 170), oklch(0.85 0.16 180));
+    color: oklch(0.18 0.04 180);
+    box-shadow: 0 10px 40px oklch(0.85 0.14 175 / 0.3), inset 0 1px 0 oklch(1 0 0 / .6);
+  }
+  .btn-primary:hover{ transform: translateY(-2px); box-shadow: 0 20px 60px oklch(0.85 0.14 175 / 0.45); }
+  .btn-ghost{
+    background: oklch(1 0 0 / 0.04);
+    color: var(--ink);
+    border-color: var(--line-2);
+  }
+  .btn-ghost:hover{ background: oklch(1 0 0 / 0.08); }
+  .btn .arrow{ transition: transform .25s; }
+  .btn:hover .arrow{ transform: translateX(4px); }
+
+  .hero-meta{
+    margin-top: 90px;
+    display:flex; gap: 60px; flex-wrap:wrap;
+    color: var(--ink-3);
+    font-size: 11.5px; font-weight:500; letter-spacing: 0.12em; text-transform:uppercase;
+    opacity:0; animation: fade-up 1.2s 1.1s cubic-bezier(.2,.8,.2,1) forwards;
+  }
+  .hero-meta .v{ display:block; font-size:14px; font-weight:400; color:var(--ink); margin-top:6px; letter-spacing:0; text-transform:none; }
+
+  /* Section */
+  .section{
+    position:relative; padding: 140px 40px;
+    max-width: 1320px; margin: 0 auto;
+  }
+  .section-eyebrow{
+    display:flex; align-items:center; gap:14px;
+    font-size:12px; font-weight:500;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--ink-3); margin-bottom: 18px;
+  }
+  .section-eyebrow .num{ color: var(--mint); }
+  .section-eyebrow .line{ height:1px; width:48px; background: var(--line-2); }
+  .section-title{
+    font-size: clamp(34px, 4.4vw, 60px);
+    line-height: 1.15; letter-spacing: -0.025em;
+    margin: 0 0 22px;
+    max-width: 900px;
+    font-weight: 700;
+  }
+  .section-title em{ color: var(--mint); font-style: normal; }
+  .section-sub{ font-size: 17px; color: var(--ink-2); max-width: 620px; line-height:1.55; }
+
+  /* Skill cards */
+  .skills{
+    display:grid; grid-template-columns: 1fr 1fr; gap: 28px;
+    margin-top: 70px;
+  }
+  @media (max-width: 980px){ .skills{ grid-template-columns: 1fr } }
+
+  .card{
+    position: relative;
+    padding: 38px;
+    border-radius: 28px;
+    background: linear-gradient(180deg, oklch(0.22 0.04 180 / 0.55), oklch(0.18 0.04 180 / 0.7));
+    border: 1px solid var(--line);
+    backdrop-filter: blur(18px) saturate(1.3);
+    -webkit-backdrop-filter: blur(18px) saturate(1.3);
+    overflow: hidden;
+    transition: transform .5s cubic-bezier(.2,.8,.2,1), border-color .4s, box-shadow .5s;
+  }
+  .card::before{
+    content:""; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
+    background: radial-gradient(360px 200px at var(--mx,50%) var(--my,0%), oklch(0.85 0.14 175 / 0.18), transparent 60%);
+    opacity:0; transition: opacity .4s;
+  }
+  .card:hover{ transform: translateY(-6px); border-color: var(--line-2); box-shadow: 0 30px 80px oklch(0 0 0 / 0.45), 0 0 60px oklch(0.55 0.13 170 / 0.18); }
+  .card:hover::before{ opacity:1; }
+
+  .card-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:18px; }
+  .card-tag{
+    font-size:11px; font-weight:500;
+    letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--mint);
+    padding: 6px 10px; border-radius:999px;
+    background: oklch(0.85 0.14 175 / 0.08);
+    border: 1px solid oklch(0.85 0.14 175 / 0.22);
+  }
+  .card-num{ font-size: 14px; font-weight:500; letter-spacing:0.12em; color: var(--ink-3); text-transform:uppercase; }
+
+  .skill-icon{
+    width: 88px; height: 88px; margin: 30px 0 28px;
+    border-radius: 22px;
+    background: linear-gradient(160deg, oklch(0.32 0.08 175), oklch(0.22 0.05 185));
+    border: 1px solid var(--line-2);
+    position:relative; overflow:hidden;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .skill-icon::after{
+    content:""; position:absolute; inset:0;
+    background: radial-gradient(80% 80% at 20% 20%, oklch(0.85 0.14 175 / 0.35), transparent 60%);
+  }
+  .skill-icon svg{ position:relative; z-index:1; }
+
+  .card h3{
+    font-size: clamp(22px, 2vw, 28px);
+    line-height: 1.3; letter-spacing: -0.02em;
+    margin: 0 0 14px;
+    font-weight: 700;
+  }
+  .card h3 em{ color: var(--mint); font-style: normal; }
+  .card p.card-desc{
+    color: var(--ink-2); font-size: 15.5px; line-height: 1.6; margin: 0 0 24px;
+  }
+  .feat-list{ list-style:none; margin: 0 0 26px; padding: 0; border-top: 1px solid var(--line); }
+  .feat-list li{
+    padding: 14px 0; border-bottom: 1px solid var(--line);
+    display:grid; grid-template-columns: 28px 1fr; gap: 16px; align-items: start;
+    font-size: 14px; color: var(--ink); line-height: 1.5;
+  }
+  .feat-list li .k{
+    font-size:11px; font-weight:500;
+    color: var(--mint); padding-top: 3px; letter-spacing:0.08em;
+  }
+  .feat-list li .v{ color: var(--ink-2); }
+  .feat-list li .v b{ color: var(--ink); font-weight:500; }
+
+  .code-preview{
+    background: oklch(0.10 0.02 190);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 18px 20px;
+    font-size: 13px; font-weight:400;
+    line-height: 1.75;
+    color: var(--ink-2);
+    margin-bottom: 28px;
+    overflow-x: auto;
+    position:relative;
+    white-space: pre;
+    tab-size: 2;
+  }
+  .code-preview::before{
+    content:""; position:absolute; top:14px; right:18px;
+    width:8px; height:8px; border-radius:50%; background: var(--mint); box-shadow:0 0 10px var(--mint);
+    animation: pulse 1.8s ease-in-out infinite;
+  }
+  .code-preview .tk-mut{ color: oklch(0.78 0.16 30) }
+  .code-preview .tk-kw{ color: var(--mint) }
+  .code-preview .tk-str{ color: oklch(0.88 0.12 200) }
+  .code-preview .tk-cm{ color: var(--ink-3); }
+  .code-preview .tk-pass{ color: oklch(0.85 0.16 145); }
+  .code-preview .tk-fail{ color: oklch(0.7 0.18 25); }
+
+  .card-foot{ display:flex; align-items:center; justify-content:space-between; gap: 14px; }
+  .stat-row{ display:flex; gap: 28px; }
+  .stat-row .stat{ }
+  .stat-row .stat b{ display:block; font-size:28px; color: var(--mint); font-weight:700; letter-spacing:-0.02em; }
+  .stat-row .stat span{ font-size:11.5px; color: var(--ink-3); letter-spacing:0.08em; font-weight:500; text-transform:uppercase; }
+  .arrow-btn{
+    width:46px; height:46px; border-radius:50%;
+    border:1px solid var(--line-2);
+    background: oklch(1 0 0 / 0.04);
+    color: var(--ink); cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    transition: background .25s, transform .25s, border-color .25s;
+  }
+  .arrow-btn:hover{ background: var(--mint); color: var(--bg-0); border-color: var(--mint); transform: rotate(-45deg); }
+
+  /* Compare strip */
+  .compare{
+    margin-top: 80px;
+    border: 1px solid var(--line);
+    border-radius: 24px;
+    background: oklch(0.16 0.03 180 / 0.5);
+    backdrop-filter: blur(14px);
+    overflow:hidden;
+  }
+  .compare-head{
+    display:grid; grid-template-columns: 1.2fr 1fr 1fr;
+    border-bottom: 1px solid var(--line);
+    font-size: 11px; font-weight:500;
+    letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .compare-head > div{ padding: 18px 26px; border-right: 1px solid var(--line); }
+  .compare-head > div:last-child{ border-right: none; }
+  .compare-row{
+    display:grid; grid-template-columns: 1.2fr 1fr 1fr;
+    border-bottom: 1px solid var(--line);
+  }
+  .compare-row:last-child{ border-bottom: none; }
+  .compare-row > div{ padding: 22px 26px; border-right: 1px solid var(--line); font-size:14.5px; color: var(--ink); }
+  .compare-row > div:first-child{ color: var(--ink-2); font-size:13.5px; }
+  .compare-row > div:last-child{ border-right: none; }
+  .check{ color: var(--mint); }
+
+  /* Process */
+  .process{
+    margin-top: 70px;
+    display:grid; grid-template-columns: repeat(4, 1fr); gap: 20px;
+  }
+  @media (max-width:900px){ .process{ grid-template-columns: repeat(2,1fr) } }
+  .step{
+    position:relative; padding: 28px 22px;
+    border:1px solid var(--line); border-radius: 20px;
+    background: oklch(0.18 0.04 180 / 0.4);
+    overflow:hidden;
+    transition: border-color .3s, transform .3s;
+  }
+  .step:hover{ border-color: var(--line-2); transform: translateY(-3px); }
+  .step .num{
+    font-size:32px; font-weight:700; letter-spacing:-0.02em;
+    color: var(--mint); line-height: 1; margin-bottom: 14px;
+  }
+  .step h4{ font-weight:700; font-size: 18px; margin:0 0 10px; letter-spacing:-0.01em; }
+  .step p{ font-size: 13.5px; color: var(--ink-2); line-height:1.55; margin:0; }
+  .step::after{
+    content:""; position:absolute; right: -30px; top:50%; height:1px; width: 40px;
+    background: linear-gradient(90deg, var(--line-2), transparent);
+  }
+  .step:last-child::after{ display:none; }
+
+  /* CTA strip */
+  .cta-strip{
+    margin: 140px auto 80px;
+    max-width: 1320px;
+    padding: 60px 50px;
+    border-radius: 32px;
+    background:
+      radial-gradient(80% 100% at 100% 0%, oklch(0.55 0.13 170 / 0.35), transparent 60%),
+      radial-gradient(60% 80% at 0% 100%, oklch(0.6 0.18 200 / 0.3), transparent 60%),
+      linear-gradient(180deg, oklch(0.22 0.05 185 / 0.6), oklch(0.16 0.04 180 / 0.7));
+    border: 1px solid var(--line-2);
+    backdrop-filter: blur(16px);
+    display:flex; align-items:center; justify-content:space-between; gap: 40px;
+    position:relative; overflow:hidden;
+  }
+  .cta-strip h2{
+    font-weight:700; font-size: clamp(24px, 2.8vw, 38px); line-height:1.25; letter-spacing:-0.02em;
+    margin:0; max-width: 640px;
+  }
+  .cta-strip h2 em{ color: var(--mint); font-style: normal; }
+
+  footer{
+    border-top: 1px solid var(--line);
+    padding: 40px;
+    color: var(--ink-3);
+    font-size: 13px;
+    display:flex; justify-content:space-between; align-items:center; gap:20px; flex-wrap:wrap;
+    max-width: 1320px; margin: 0 auto;
+  }
+
+  /* reveal on scroll */
+  .reveal{ opacity:0; transform: translateY(30px); transition: opacity .9s cubic-bezier(.2,.8,.2,1), transform .9s cubic-bezier(.2,.8,.2,1); }
+  .reveal.in{ opacity:1; transform: none; }
+  .reveal.d2{ transition-delay: .12s }
+  .reveal.d3{ transition-delay: .24s }
+  .reveal.d4{ transition-delay: .36s }
+
+  /* Decorative leaf */
+  .leaf-deco{
+    position:absolute; opacity:.5; pointer-events:none;
+    animation: sway 6s ease-in-out infinite alternate;
+  }
+  @keyframes sway{
+    0%{ transform: rotate(-4deg) translateY(0) }
+    100%{ transform: rotate(6deg) translateY(-12px) }
+  }
+</style>
+</head>
+<body>
+
+<!-- ===================== BACKGROUND SCENE ===================== -->
+<div class="scene" aria-hidden="true">
+  <div class="beam"></div>
+  <div class="aurora"></div>
+
+  <!-- Far forest layer -->
+  <div class="forest layer-1" data-parallax="0.05">
+    <svg viewBox="0 0 1600 600" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="f1" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0" stop-color="oklch(0.28 0.06 175)" stop-opacity="0"/>
+          <stop offset="1" stop-color="oklch(0.22 0.05 180)" stop-opacity="1"/>
+        </linearGradient>
+      </defs>
+      <path fill="url(#f1)" d="M0,420 C120,360 200,400 320,360 C440,320 520,380 640,340 C760,300 860,360 980,330 C1100,300 1220,360 1340,330 C1460,300 1540,350 1600,340 L1600,600 L0,600 Z"/>
+      <g fill="oklch(0.22 0.05 180)" opacity="0.85">
+        <polygon points="100,340 80,420 120,420"/>
+        <polygon points="200,330 178,430 222,430"/>
+        <polygon points="320,320 295,425 345,425"/>
+        <polygon points="480,335 458,420 502,420"/>
+        <polygon points="640,315 612,425 668,425"/>
+        <polygon points="810,335 788,420 832,420"/>
+        <polygon points="980,318 953,425 1007,425"/>
+        <polygon points="1140,335 1118,422 1162,422"/>
+        <polygon points="1300,320 1273,425 1327,425"/>
+        <polygon points="1460,335 1438,420 1482,420"/>
+      </g>
+    </svg>
+  </div>
+
+  <!-- Mid forest layer -->
+  <div class="forest layer-2" data-parallax="0.10">
+    <svg viewBox="0 0 1600 500" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="f2" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0" stop-color="oklch(0.20 0.06 175)" stop-opacity="0"/>
+          <stop offset="1" stop-color="oklch(0.15 0.05 180)" stop-opacity="1"/>
+        </linearGradient>
+      </defs>
+      <path fill="url(#f2)" d="M0,360 C160,300 280,340 420,320 C560,300 660,340 800,310 C940,280 1080,330 1220,310 C1360,290 1480,330 1600,310 L1600,500 L0,500 Z"/>
+      <g fill="oklch(0.16 0.05 180)">
+        <polygon points="80,240 50,380 110,380"/>
+        <polygon points="220,230 190,385 250,385"/>
+        <polygon points="360,225 328,380 392,380"/>
+        <polygon points="520,220 488,390 552,390"/>
+        <polygon points="700,230 668,385 732,385"/>
+        <polygon points="880,215 848,390 912,390"/>
+        <polygon points="1060,230 1028,385 1092,385"/>
+        <polygon points="1240,215 1208,390 1272,390"/>
+        <polygon points="1420,230 1388,385 1452,385"/>
+      </g>
+    </svg>
+  </div>
+
+  <!-- Front forest layer -->
+  <div class="forest layer-3" data-parallax="0.18">
+    <svg viewBox="0 0 1600 400" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="f3" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0" stop-color="oklch(0.13 0.03 185)" stop-opacity="0"/>
+          <stop offset="1" stop-color="oklch(0.10 0.02 190)" stop-opacity="1"/>
+        </linearGradient>
+      </defs>
+      <path fill="url(#f3)" d="M0,280 C140,240 240,260 380,240 C520,220 620,260 760,240 C900,220 1040,260 1180,240 C1320,220 1460,260 1600,240 L1600,400 L0,400 Z"/>
+      <g fill="oklch(0.10 0.02 190)">
+        <polygon points="60,150 30,320 90,320"/>
+        <polygon points="180,140 145,325 215,325"/>
+        <polygon points="320,145 285,322 355,322"/>
+        <polygon points="500,130 463,328 537,328"/>
+        <polygon points="680,140 645,325 715,325"/>
+        <polygon points="870,130 833,328 907,328"/>
+        <polygon points="1060,140 1025,325 1095,325"/>
+        <polygon points="1250,130 1213,328 1287,328"/>
+        <polygon points="1450,140 1413,325 1487,325"/>
+      </g>
+    </svg>
+  </div>
+
+  <div class="spores" id="spores"></div>
+  <div class="grain"></div>
+</div>
+
+<div class="mouse-light" id="mouseLight"></div>
+
+<!-- ===================== CONTENT ===================== -->
+<div class="wrap">
+
+  <nav class="top">
+    <div class="logo">
+      <div class="logo-mark"></div>
+      <span><b>Chennai</b> / Test Validity Lab</span>
+    </div>
+    <ul>
+      <li><a href="#tracks">Tracks</a></li>
+      <li><a href="#pipeline">Pipeline</a></li>
+      <li><a href="#compare">Compare</a></li>
+      <li><a href="#install">Install</a></li>
+    </ul>
+    <button class="nav-cta">Run in Claude Code →</button>
+  </nav>
+
+  <!-- HERO -->
+  <header class="hero">
+    <div class="eyebrow"><span class="dot"></span>CLAUDE&nbsp;CODE&nbsp;·&nbsp;SKILL&nbsp;·&nbsp;v1.0</div>
+
+    <h1 class="title">
+      <span class="title-row"><span>테스트가 정말</span></span>
+      <span class="title-row"><span><em>버그를 잡는지</em></span></span>
+      <span class="title-row"><span>측정합니다.</span></span>
+    </h1>
+
+    <p class="lede">
+      통과하는 테스트가 의미 있는 테스트인지는 다른 문제입니다.
+      <b style="color:var(--ink)">test-validity-evaluator</b>는 코드에 변이를 주입하고
+      에이전트로 테스트를 적대적으로 흔들어, 어떤 테스트가 비어 있는지 단일 보고서로 알려줍니다.
+    </p>
+
+    <div class="hero-cta">
+      <a href="#tracks" class="btn btn-primary">
+        두 트랙 살펴보기 <span class="arrow">→</span>
+      </a>
+      <a href="#pipeline" class="btn btn-ghost">
+        파이프라인 보기
+      </a>
+    </div>
+
+    <div class="hero-meta">
+      <div>코드네임 <span class="v">Chennai · v1.0</span></div>
+      <div>지원 어댑터 <span class="v">Python · pytest &nbsp;/&nbsp; Kotlin · JUnit 5</span></div>
+      <div>릴리즈 <span class="v">2026.05.18</span></div>
+      <div>발화 <span class="v">"테스트 품질 평가해줘"</span></div>
+    </div>
+  </header>
+
+  <!-- TRACKS -->
+  <section class="section" id="tracks">
+    <div class="section-eyebrow">
+      <span class="num">01 / 02</span>
+      <span class="line"></span>
+      <span>두 개의 평가 트랙</span>
+    </div>
+    <h2 class="section-title reveal">변이와 적대, 두 방향에서 동시에.</h2>
+    <p class="section-sub reveal d2">
+      Mutation은 소스 코드를, Adversarial은 테스트 코드를 흔듭니다.
+      서로 겹치지 않는 각도의 약점을 잡아내고, 단일 ValidityReport로 합쳐 보고합니다.
+    </p>
+
+    <div class="skills">
+
+      <!-- =================== Track 01 =================== -->
+      <article class="card reveal" data-card>
+        <div class="card-head">
+          <div class="card-tag">Track 01 · Mutation</div>
+          <div class="card-num">i.</div>
+        </div>
+
+        <div class="skill-icon">
+          <svg width="44" height="44" viewBox="0 0 44 44" fill="none">
+            <g stroke="oklch(0.92 0.14 175)" stroke-width="1.6" stroke-linecap="round">
+              <path d="M8 4 C 24 14, 20 30, 36 40" />
+              <path d="M36 4 C 20 14, 24 30, 8 40" />
+              <line x1="11" y1="8" x2="33" y2="8"/>
+              <line x1="13" y1="14" x2="31" y2="14"/>
+              <line x1="14" y1="22" x2="30" y2="22" stroke="oklch(0.78 0.18 30)"/>
+              <line x1="13" y1="30" x2="31" y2="30"/>
+              <line x1="11" y1="36" x2="33" y2="36"/>
+            </g>
+            <circle cx="22" cy="22" r="2.2" fill="oklch(0.78 0.18 30)"/>
+          </svg>
+        </div>
+
+        <h3>LLM-based Semantic <em>Mutation</em> Testing</h3>
+        <p class="card-desc">
+          AST 기반 syntactic 변이 6종과 LLM 기반 semantic 변이를 결합합니다.
+          살아남은 변이는 곧 "잡지 못한 결함의 좌표"이며,
+          survivor-diagnose 프롬프트가 보강해야 할 어서션까지 자연어로 제시합니다.
+        </p>
+
+        <div class="code-preview">
+<span class="tk-cm">// mutation_orchestrate.py</span>
+<span class="tk-kw">ROR</span>  user.age <span class="tk-mut">&gt;=</span> 18  →  user.age <span class="tk-mut">&gt;</span> 18
+       killed by  test_grant_at_boundary
+
+<span class="tk-kw">COR</span>  flags.a <span class="tk-mut">&amp;&amp;</span> flags.b  →  flags.a <span class="tk-mut">||</span> flags.b
+       <span class="tk-fail">SURVIVED</span>  ← 어서션 누락
+       diagnosis: assert_called_with(flag_b=True) 미존재
+
+<span class="tk-cm">[score] 0.76  →  target 0.85  (9 survivors)</span>
+        </div>
+
+        <ul class="feat-list">
+          <li><span class="k">01</span><span class="v"><b>6종 syntactic operator.</b> AOR · ROR · COR · LCR · BoundaryShift · ConstantReplace.</span></li>
+          <li><span class="k">02</span><span class="v"><b>semantic-operator 프롬프트.</b> 도메인 의미를 보존한 채 결함 패턴 기반 변이를 생성합니다.</span></li>
+          <li><span class="k">03</span><span class="v"><b>equivalence-judge 자동 필터.</b> 동작이 동일한 변이를 사람 확인 없이 제거합니다.</span></li>
+          <li><span class="k">04</span><span class="v"><b>MutationLedger 전 이력 보존.</b> 생성·필터·실행·진단의 모든 단계가 한 파일에 남습니다.</span></li>
+        </ul>
+
+        <div class="card-foot">
+          <div class="stat-row">
+            <div class="stat"><b>6 + 1</b><span>operators</span></div>
+            <div class="stat"><b>200</b><span>max mutants</span></div>
+          </div>
+          <button class="arrow-btn" aria-label="자세히 보기">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+      </article>
+
+      <!-- =================== Track 02 =================== -->
+      <article class="card reveal d2" data-card>
+        <div class="card-head">
+          <div class="card-tag">Track 02 · Adversarial</div>
+          <div class="card-num">ii.</div>
+        </div>
+
+        <div class="skill-icon">
+          <svg width="44" height="44" viewBox="0 0 44 44" fill="none">
+            <g stroke="oklch(0.92 0.14 175)" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="14" cy="14" r="5"/>
+              <circle cx="30" cy="14" r="5" stroke="oklch(0.78 0.18 30)"/>
+              <circle cx="22" cy="32" r="5"/>
+              <path d="M14 19 Q22 25 22 27" />
+              <path d="M30 19 Q22 25 22 27" stroke="oklch(0.78 0.18 30)"/>
+              <path d="M9 9 L5 5 M5 9 L9 5" stroke-width="1.2"/>
+              <path d="M35 9 L39 5 M39 9 L35 5" stroke-width="1.2" stroke="oklch(0.78 0.18 30)"/>
+            </g>
+          </svg>
+        </div>
+
+        <h3>Agentic <em>Adversarial</em> Testing</h3>
+        <p class="card-desc">
+          5종 공격 프롬프트(boundary · edge-case · fuzzer · spec-divergence · state)가
+          테스트 자체를 적대적으로 검사합니다. 동어반복 어서션·잘못된 결합도·이름과
+          동작의 불일치를 critique 프롬프트 4종이 별도로 짚어냅니다.
+        </p>
+
+        <div class="code-preview">
+<span class="tk-cm">// adversarial_orchestrate.py</span>
+<span class="tk-kw">case</span>   test_transfer_negative_amount
+<span class="tk-kw">probe</span>  amount = <span class="tk-mut">-0.0001</span>   (boundary)
+<span class="tk-pass">→ PASS</span>  서비스가 BadRequest 반환
+
+<span class="tk-kw">case</span>   test_username_validation
+<span class="tk-kw">probe</span>  critique-tautology
+<span class="tk-fail">→ FAIL</span>  assert <span class="tk-str">"a"</span> in <span class="tk-str">"abc"</span> 형식의
+        무력 어서션 — finding f_8c12e3
+        </div>
+
+        <ul class="feat-list">
+          <li><span class="k">01</span><span class="v"><b>5 adversarial 생성자.</b> 경계값·엣지·퍼저·스펙 괴리·상태 의존 시나리오를 분담합니다.</span></li>
+          <li><span class="k">02</span><span class="v"><b>4 critique 평가자.</b> assertion·behavior-naming·coupling·tautology 약점을 분리해 보고합니다.</span></li>
+          <li><span class="k">03</span><span class="v"><b>AdversarialLedger.</b> 각 case 의 생성자·근거·결과를 mutation과 동일한 형식으로 기록합니다.</span></li>
+          <li><span class="k">04</span><span class="v"><b>샌드박스 실행 강제.</b> 어댑터의 <code class="mono">run.py</code> 안에서만 동작 — 프로덕션 경로 차단.</span></li>
+        </ul>
+
+        <div class="card-foot">
+          <div class="stat-row">
+            <div class="stat"><b>5 + 4</b><span>prompts</span></div>
+            <div class="stat"><b>6</b><span>종료 조건</span></div>
+          </div>
+          <button class="arrow-btn" aria-label="자세히 보기">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+      </article>
+    </div>
+
+    <!-- COMPARE TABLE -->
+    <div class="compare reveal" id="compare" style="margin-top:90px;">
+      <div class="compare-head">
+        <div>비교 기준</div>
+        <div>Mutation</div>
+        <div>Adversarial</div>
+      </div>
+      <div class="compare-row">
+        <div>흔드는 대상</div>
+        <div>소스 코드 (AST + 의미 변이)</div>
+        <div>테스트 코드 + 호출 시나리오</div>
+      </div>
+      <div class="compare-row">
+        <div>드러내는 약점</div>
+        <div>분기 누락, 경계 어서션 부재</div>
+        <div>동어반복, 결합도, 명명 괴리</div>
+      </div>
+      <div class="compare-row">
+        <div>핵심 산출물</div>
+        <div>MutationLedger.json</div>
+        <div>AdversarialLedger.json</div>
+      </div>
+      <div class="compare-row">
+        <div>실행 비용</div>
+        <div>≈ 8 – 12 분 / 1k LOC</div>
+        <div>≈ 3 – 5 분 / 시나리오</div>
+      </div>
+      <div class="compare-row">
+        <div>최적 트리거</div>
+        <div>PR 게이트, 야간 CI</div>
+        <div>릴리즈 전 회귀, 보강 루프 검증</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PIPELINE -->
+  <section class="section" id="pipeline">
+    <div class="section-eyebrow">
+      <span class="num">02</span>
+      <span class="line"></span>
+      <span>단일 오케스트레이터, 네 단계</span>
+    </div>
+    <h2 class="section-title reveal">한 번 발화 → 끝까지 자동.</h2>
+    <p class="section-sub reveal d2">
+      <code class="mono">orchestrate.py</code>가 분류·매핑·평가·집계를 순차 실행하고,
+      6개의 종료 조건이 보강 루프를 무한히 돌지 않도록 막습니다.
+    </p>
+
+    <div class="process">
+      <div class="step reveal">
+        <div class="num">01</div>
+        <h4>Tier Classification</h4>
+        <p>e2e·integration·flaky를 걸러내 unit 테스트만 평가 대상으로 남깁니다. <code class="mono">classify.py</code>가 included/excluded를 출력합니다.</p>
+      </div>
+      <div class="step reveal d2">
+        <div class="num">02</div>
+        <h4>Subject Location</h4>
+        <p>어댑터의 <code class="mono">resolve.py</code>가 각 테스트의 SUT를 추적해 TestSubjectMap을 만듭니다. 이후 모든 단계의 공통 입력.</p>
+      </div>
+      <div class="step reveal d3">
+        <div class="num">03</div>
+        <h4>Mutation + Adversarial</h4>
+        <p>두 트랙이 같은 SubjectMap 위에서 병렬로 돌고, 각자 ledger·findings를 ValidityReport에 합칩니다.</p>
+      </div>
+      <div class="step reveal d4">
+        <div class="num">04</div>
+        <h4>Aggregation</h4>
+        <p>dedupe·우선순위·클러스터링 후 ValidityReport JSON과 자체 포함 HTML 한 쌍이 <code class="mono">out/&lt;session&gt;/iter-N/</code> 에 떨어집니다.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- INSTALL -->
+  <section class="section" id="install" style="padding-top:40px;">
+    <div class="section-eyebrow">
+      <span class="num">03</span>
+      <span class="line"></span>
+      <span>설치 한 번, 어느 레포에서나</span>
+    </div>
+    <h2 class="section-title reveal">글로벌 symlink로 한 번만.</h2>
+    <p class="section-sub reveal d2">
+      <code class="mono">install.sh</code>가 <code class="mono">~/.claude/skills/test-validity-evaluator</code>로
+      symlink를 걸어둡니다. 이후 모든 레포의 Claude Code 세션이 자동 디스커버 — <code class="mono">git pull</code> 만으로 업데이트.
+    </p>
+
+    <div class="skills" style="grid-template-columns:1fr; margin-top:50px;">
+      <article class="card reveal" data-card>
+        <div class="card-head">
+          <div class="card-tag">Quickstart</div>
+          <div class="card-num">3 lines</div>
+        </div>
+        <div class="code-preview" style="margin-top:28px;">
+<span class="tk-cm"># 1. 글로벌 설치 (한 번)</span>
+<span class="tk-kw">git clone</span> https://github.com/binary-ho/test-test.git chennai
+<span class="tk-kw">cd</span> chennai &amp;&amp; ./install.sh
+
+<span class="tk-cm"># 2. 어느 레포에서나 — Claude Code 세션에서 자연 발화</span>
+<span class="tk-str">"이 프로젝트 테스트 품질 평가해줘"</span>
+<span class="tk-str">"테스트가 진짜 버그를 잡는지 확인해줘"</span>
+
+<span class="tk-cm"># 3. 결과는 cwd 기준 out/&lt;session&gt;/iter-N/ 에</span>
+out/evs_2026-05-18_a1b2/iter-0/validity_report.json
+out/evs_2026-05-18_a1b2/iter-0/report.html
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <div class="cta-strip reveal">
+    <div>
+      <h2>한 번의 발화로, <em>테스트의 빈자리</em>가 드러납니다.</h2>
+    </div>
+    <div style="display:flex; gap:14px; flex-shrink:0;">
+      <a href="#install" class="btn btn-primary">시작하기 <span class="arrow">→</span></a>
+      <a href="#tracks" class="btn btn-ghost">트랙 다시 보기</a>
+    </div>
+  </div>
+
+  <footer>
+    <div>© 2026 Chennai · test-validity-evaluator · Powered by Claude Code Skills</div>
+    <div style="display:flex; gap:24px;"><a href="#tracks" style="color:inherit;text-decoration:none">Tracks</a><a href="#pipeline" style="color:inherit;text-decoration:none">Pipeline</a><a href="#install" style="color:inherit;text-decoration:none">Install</a></div>
+  </footer>
+</div>
+
+<script>
+  // ============ Spores (floating particles) ============
+  (function(){
+    const root = document.getElementById('spores');
+    const count = 28;
+    for (let i = 0; i < count; i++){
+      const el = document.createElement('div');
+      el.className = 'spore';
+      const left = Math.random() * 100;
+      const size = 3 + Math.random() * 6;
+      const dur = 14 + Math.random() * 18;
+      const delay = -Math.random() * dur;
+      const dx = (Math.random() * 60 - 30) + 'px';
+      const opacity = 0.4 + Math.random() * 0.6;
+      el.style.left = left + 'vw';
+      el.style.width = size + 'px';
+      el.style.height = size + 'px';
+      el.style.animationDuration = dur + 's';
+      el.style.animationDelay = delay + 's';
+      el.style.setProperty('--dx', dx);
+      el.style.opacity = opacity;
+      root.appendChild(el);
+    }
+  })();
+
+  // ============ Mouse light + card glow ============
+  (function(){
+    const light = document.getElementById('mouseLight');
+    let tx = window.innerWidth/2, ty = window.innerHeight/2;
+    let cx = tx, cy = ty;
+    document.addEventListener('mousemove', (e) => {
+      tx = e.clientX; ty = e.clientY;
+      document.querySelectorAll('[data-card]').forEach(card => {
+        const r = card.getBoundingClientRect();
+        const mx = ((e.clientX - r.left) / r.width) * 100;
+        const my = ((e.clientY - r.top) / r.height) * 100;
+        card.style.setProperty('--mx', mx + '%');
+        card.style.setProperty('--my', my + '%');
+      });
+    });
+    function tick(){
+      cx += (tx - cx) * 0.12;
+      cy += (ty - cy) * 0.12;
+      light.style.left = cx + 'px';
+      light.style.top = cy + 'px';
+      requestAnimationFrame(tick);
+    }
+    tick();
+  })();
+
+  // ============ Parallax on scroll for forest layers ============
+  (function(){
+    const layers = document.querySelectorAll('[data-parallax]');
+    let scrollY = 0, ticking = false;
+    function onScroll(){
+      scrollY = window.scrollY;
+      if (!ticking){
+        requestAnimationFrame(()=>{
+          layers.forEach(l => {
+            const k = parseFloat(l.dataset.parallax);
+            l.style.transform = 'translateY(' + (scrollY * k) + 'px)';
+          });
+          ticking = false;
+        });
+        ticking = true;
+      }
+    }
+    window.addEventListener('scroll', onScroll, { passive: true });
+  })();
+
+  // ============ Reveal on scroll ============
+  (function(){
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting){
+          e.target.classList.add('in');
+          io.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.15 });
+    document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+  })();
+
+  // ============ Subtle mouse parallax for hero ============
+  (function(){
+    const hero = document.querySelector('header.hero');
+    if (!hero) return;
+    document.addEventListener('mousemove', (e) => {
+      const x = (e.clientX / window.innerWidth - 0.5) * 8;
+      const y = (e.clientY / window.innerHeight - 0.5) * 6;
+      document.querySelector('.layer-1').style.marginLeft = x*0.4 + 'px';
+      document.querySelector('.layer-2').style.marginLeft = x*0.8 + 'px';
+      document.querySelector('.layer-3').style.marginLeft = x*1.4 + 'px';
+    });
+  })();
+</script>
+</body>
+</html>
