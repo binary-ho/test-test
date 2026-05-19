@@ -104,7 +104,15 @@ def line_is_import(text: str) -> bool:
 
 _AOR_RE = re.compile(r"(?<![+\-*/%=!<>])([+\-*/%])(?![=+\-*/%])")
 _ROR_2CHAR = re.compile(r"(<=|>=|==|!=)(?!=)")
-_ROR_1CHAR = re.compile(r"(?<=[\w)\]])\s*(<|>)\s*(?=[\w(\[])")
+# `<` / `>` for relational, but skip generics: `Map<String, Int>`, `List<T>`,
+# `): PageResult<Foo>`. Heuristic: `<` followed by whitespace then a capital
+# letter is almost always a generic type parameter. Same for `>` preceded by
+# something that looks like end-of-generic (capital identifier or `>`).
+_ROR_1CHAR = re.compile(
+    r"(?<=[\w)\]])\s*(<|>)\s*(?=[\w(\[])"
+)
+_GENERIC_LT_AFTER = re.compile(r"^\s*[A-Z]")
+_GENERIC_GT_BEFORE = re.compile(r"[A-Z\w]>?\s*$")
 _INT_RE = re.compile(r"(?<![\w.])(\d+)(?![\w.])")
 
 
@@ -121,6 +129,10 @@ def emit_aor(src: str, mask: List[bool], starts: List[int],
         while j >= 0 and src[j] in " \t":
             j -= 1
         if j < 0 or src[j] in "({[,=;:?&|<>!+-*/%":
+            continue
+        # skip lambda arrows: Kotlin `->`, TS `=>` (the `=` was already handled
+        # by the lookbehind on `=`; this catches the `-` of `->`).
+        if op == "-" and pos + 1 < len(src) and src[pos + 1] == ">":
             continue
         line_no = line_of(starts, pos)
         start, text = line_text(src, starts, line_no)
@@ -150,6 +162,18 @@ def emit_ror(src: str, mask: List[bool], starts: List[int],
                 continue
             if op == ">" and pos > 0 and src[pos - 1] == "-":
                 continue
+            # Generic guard for single-char `<` / `>`: `<Foo>` / `<T>` look
+            # like comparisons under the bare regex. Skip when the operator
+            # sits adjacent to an uppercase identifier.
+            if op == "<" and _GENERIC_LT_AFTER.match(src[pos + 1:pos + 6]):
+                continue
+            if op == ">":
+                # Look backwards skipping whitespace.
+                bj = pos - 1
+                while bj >= 0 and src[bj] in " \t":
+                    bj -= 1
+                if bj >= 0 and (src[bj].isupper() or src[bj] == ">"):
+                    continue
             line_no = line_of(starts, pos)
             if not within_span(line_no, span):
                 continue

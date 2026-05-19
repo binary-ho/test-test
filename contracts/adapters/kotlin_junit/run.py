@@ -52,14 +52,30 @@ def _gradle_command(project_root: Path) -> list[str]:
 
 
 def _guess_project_root(file_path: str) -> Path:
-    """Walk up looking for settings.gradle(.kts) or build.gradle(.kts)."""
+    """Walk up looking for the *outermost* Gradle root.
+
+    Preference order:
+      1. directory containing `gradlew` (the wrapper lives at the actual root)
+      2. directory containing `settings.gradle(.kts)`
+      3. directory containing `build.gradle(.kts)` (fallback for single-module)
+    Multi-module projects (e.g. `outer/settings.gradle.kts` including
+    `inner/`) need the outer dir — `gradlew` only exists at the outer level.
+    """
     p = Path(file_path).resolve()
+    settings_root: Optional[Path] = None
+    build_root: Optional[Path] = None
     for cur in [p.parent, *p.parents]:
-        for marker in ("settings.gradle.kts", "settings.gradle",
-                       "build.gradle.kts", "build.gradle"):
-            if (cur / marker).is_file():
-                return cur
-    return p.parent
+        if (cur / "gradlew").is_file():
+            return cur
+        if settings_root is None and (
+            (cur / "settings.gradle.kts").is_file() or (cur / "settings.gradle").is_file()
+        ):
+            settings_root = cur
+        if build_root is None and (
+            (cur / "build.gradle.kts").is_file() or (cur / "build.gradle").is_file()
+        ):
+            build_root = cur
+    return settings_root or build_root or p.parent
 
 
 def _extract_package(file_path: Path) -> str:
@@ -159,10 +175,29 @@ def run_tests_for_mutant(mutant: dict, test_ids: list[str], timeout: int = _DEFA
     if failed:
         return {"mutant_id": mutant["id"], "status": "killed",
                 "killing_tests": failed, "wall_clock_seconds": elapsed, "cache_status": "miss"}
-    # returncode != 0 but no failures recorded => compile / config error.
-    return {"mutant_id": mutant["id"], "status": "error", "killing_tests": [],
+    # returncode != 0 but no test failures in XML — could be compile error
+    # (kotlinc rejected the mutated source, which counts as the codebase
+    # catching the mutation) or genuine infrastructure failure.
+    combined = (proc.stderr + proc.stdout).lower()
+    infra_error = (
+        "no such task" in combined
+        or "could not resolve" in combined
+        or "could not download" in combined
+        or "unable to access" in combined
+        or "connection refused" in combined
+        or "out of memory" in combined
+    )
+    if infra_error or not passed and not failed and proc.returncode != 0 and len(combined) < 50:
+        return {"mutant_id": mutant["id"], "status": "error", "killing_tests": [],
+                "wall_clock_seconds": elapsed,
+                "detail": (proc.stderr or proc.stdout)[-400:], "cache_status": "miss"}
+    # Default: no tests ran AND gradle returned non-zero → compile rejected
+    # the mutation. Counted as killed (the codebase caught it).
+    return {"mutant_id": mutant["id"], "status": "killed",
+            "killing_tests": ["<kotlinc>"],
             "wall_clock_seconds": elapsed,
-            "detail": (proc.stderr or proc.stdout)[-400:], "cache_status": "miss"}
+            "detail": "killed by compiler",
+            "cache_status": "miss"}
 
 
 # --- adversarial case ------------------------------------------------------
